@@ -137,6 +137,10 @@ internal sealed class MainWindow : Window
         if (report.Signing is { } signing)
             cards.Children.Add(BinocUi.Card(BuildSigning(signing)));
 
+        // Code (DEX) card.
+        if (report.Code is { } code)
+            cards.Children.Add(BinocUi.Card(BuildCode(code)));
+
         // Archive / size breakdown card.
         if (report.Archive is { } archive)
             cards.Children.Add(BinocUi.Card(BuildArchive(archive)));
@@ -265,6 +269,32 @@ internal sealed class MainWindow : Window
                 FontSize = 12, Foreground = Palette.WarnBrush, TextWrapping = TextWrapping.Wrap,
             });
         }
+        return stack;
+    }
+
+    private static Control BuildCode(CodeInfo code)
+    {
+        var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*"), RowSpacing = 8, ColumnSpacing = 16 };
+        void Row(string label, string value, IBrush? brush = null)
+        {
+            int r = grid.RowDefinitions.Count;
+            grid.RowDefinitions.Add(new RowDefinition(GridLength.Auto));
+            var l = BinocUi.FieldLabel(label); l.VerticalAlignment = VerticalAlignment.Center;
+            var v = BinocUi.ValueText(value); if (brush is not null) v.Foreground = brush;
+            Grid.SetRow(l, r); Grid.SetColumn(l, 0);
+            Grid.SetRow(v, r); Grid.SetColumn(v, 1);
+            grid.Children.Add(l); grid.Children.Add(v);
+        }
+
+        Row("DEX FILES", code.MultiDex ? $"{code.DexFileCount} (multidex)" : code.DexFileCount.ToString());
+        Row("METHOD REFS", $"{code.TotalMethodRefs:N0} total");
+        Row("MAX PER DEX", $"{code.MaxMethodRefsInADex:N0} / 65,536",
+            code.NearMethodLimit ? Palette.WarnBrush : Palette.FgBrush);
+        Row("CLASSES", $"{code.TotalDefinedClasses:N0}");
+
+        var stack = new StackPanel();
+        stack.Children.Add(BinocUi.SectionTitle("Code (DEX)"));
+        stack.Children.Add(grid);
         return stack;
     }
 

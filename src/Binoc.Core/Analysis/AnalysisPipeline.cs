@@ -19,6 +19,7 @@ public static class AnalysisPipeline
         new ArchiveWalkAnalyzer(),
         new IdentityAnalyzer(),
         new SigningAnalyzer(),
+        new CodeAnalyzer(),
     };
 
     /// <summary>Analyse the file at <paramref name="path"/> and return a fully-populated report. Throws
