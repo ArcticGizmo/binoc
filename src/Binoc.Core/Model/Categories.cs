@@ -52,6 +52,17 @@ public sealed class IdentityInfo
 /// </summary>
 public sealed class SigningInfo
 {
-    /// <summary>Human-readable summary of the signing state (placeholder until M2).</summary>
-    public string? Summary { get; set; }
+    /// <summary>Signing schemes detected, e.g. "v1 (JAR)", "v2", "v3", "v3.1 (rotation)" for Android, or
+    /// "Apple code signing" for iOS.</summary>
+    public List<string> Schemes { get; } = new();
+
+    /// <summary>The primary signer's certificate, when one could be extracted.</summary>
+    public CertInfo? Certificate { get; set; }
+
+    /// <summary>Any additional signer certificates (key rotation / multiple signers).</summary>
+    public List<CertInfo> AdditionalCertificates { get; } = new();
+
+    /// <summary>AAB only: true to flag that this signer is the <em>upload</em> key, not the distribution
+    /// key that actually ships (Play App Signing re-signs the generated APKs — findings §AAB, decision D3/D4).</summary>
+    public bool UploadKeyNotDistribution { get; set; }
 }

@@ -8,4 +8,10 @@
     <RootNamespace>Binoc.Core</RootNamespace>
     <AssemblyName>Binoc.Core</AssemblyName>
   </PropertyGroup>
+
+  <ItemGroup>
+    <!-- SignedCms (PKCS#7 / CMS) for APK v1 / AAB upload-key blocks and the iOS embedded.mobileprovision.
+         A Microsoft first-party, in-box framework package — not a third-party parsing dependency (D1). -->
+    <PackageReference Include="System.Security.Cryptography.Pkcs" Version="10.0.0" />
+  </ItemGroup>
 </Project>

@@ -133,6 +133,10 @@ internal sealed class MainWindow : Window
         if (report.Identity is { } identity)
             cards.Children.Add(BinocUi.Card(BuildIdentity(identity)));
 
+        // Signing card.
+        if (report.Signing is { } signing)
+            cards.Children.Add(BinocUi.Card(BuildSigning(signing)));
+
         // Archive / size breakdown card.
         if (report.Archive is { } archive)
             cards.Children.Add(BinocUi.Card(BuildArchive(archive)));
@@ -216,6 +220,51 @@ internal sealed class MainWindow : Window
         var stack = new StackPanel();
         stack.Children.Add(BinocUi.SectionTitle("Identity"));
         stack.Children.Add(grid);
+        return stack;
+    }
+
+    private static Control BuildSigning(SigningInfo s)
+    {
+        var stack = new StackPanel();
+        stack.Children.Add(BinocUi.SectionTitle("Signing"));
+
+        var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*"), RowSpacing = 8, ColumnSpacing = 16 };
+        void Row(string label, string? value, IBrush? brush = null)
+        {
+            if (string.IsNullOrEmpty(value)) return;
+            int r = grid.RowDefinitions.Count;
+            grid.RowDefinitions.Add(new RowDefinition(GridLength.Auto));
+            var l = BinocUi.FieldLabel(label); l.VerticalAlignment = VerticalAlignment.Center;
+            var v = BinocUi.ValueText(value); if (brush is not null) v.Foreground = brush;
+            Grid.SetRow(l, r); Grid.SetColumn(l, 0);
+            Grid.SetRow(v, r); Grid.SetColumn(v, 1);
+            grid.Children.Add(l); grid.Children.Add(v);
+        }
+
+        Row("SCHEMES", s.Schemes.Count > 0 ? string.Join(", ", s.Schemes) : "none detected");
+        if (s.Certificate is { } c)
+        {
+            Row("SUBJECT", c.Subject);
+            if (!c.SelfSigned) Row("ISSUER", c.Issuer);
+            Row("SHA-256", c.Sha256Fingerprint);
+            Row("SHA-1", c.Sha1Fingerprint);
+            Row("KEY", $"{c.SignatureAlgorithm}, {c.KeySizeBits}-bit");
+            var validBrush = c.IsExpiredOrNotYetValid ? Palette.ErrorBrush : Palette.OkBrush;
+            Row("VALID", $"{c.NotBefore:yyyy-MM-dd} – {c.NotAfter:yyyy-MM-dd}", validBrush);
+            if (c.IsAndroidDebugKey) Row("KEY TYPE", "Android debug key", Palette.WarnBrush);
+            else if (c.SelfSigned) Row("KEY TYPE", "Self-signed", Palette.MutedBrush);
+        }
+        stack.Children.Add(grid);
+
+        if (s.UploadKeyNotDistribution)
+        {
+            stack.Children.Add(BinocUi.Separator());
+            stack.Children.Add(new TextBlock
+            {
+                Text = "This is the upload key, not the distribution key. Play App Signing re-signs what ships.",
+                FontSize = 12, Foreground = Palette.WarnBrush, TextWrapping = TextWrapping.Wrap,
+            });
+        }
         return stack;
     }
 
