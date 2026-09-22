@@ -141,6 +141,10 @@ internal sealed class MainWindow : Window
         if (report.Code is { } code)
             cards.Children.Add(BinocUi.Card(BuildCode(code)));
 
+        // Native libraries card.
+        if (report.NativeLibs is { } native)
+            cards.Children.Add(BinocUi.Card(BuildNativeLibs(native)));
+
         // Archive / size breakdown card.
         if (report.Archive is { } archive)
             cards.Children.Add(BinocUi.Card(BuildArchive(archive)));
@@ -296,6 +300,47 @@ internal sealed class MainWindow : Window
         stack.Children.Add(BinocUi.SectionTitle("Code (DEX)"));
         stack.Children.Add(grid);
         return stack;
+    }
+
+    private static Control BuildNativeLibs(NativeLibsInfo n)
+    {
+        var stack = new StackPanel();
+        stack.Children.Add(BinocUi.SectionTitle("Native libraries"));
+        stack.Children.Add(new TextBlock
+        {
+            Text = $"ABIs: {string.Join(", ", n.Abis)}", FontSize = 13, Foreground = Palette.FgBrush,
+            Margin = new Thickness(0, 0, 0, 10), TextWrapping = TextWrapping.Wrap,
+        });
+
+        // One row per binary: name + checksec chips.
+        foreach (var b in n.Binaries)
+        {
+            var name = new TextBlock
+            {
+                Text = $"{b.Abi} · {System.IO.Path.GetFileName(b.Path)}  ({b.Arch})",
+                FontSize = 12, Foreground = Palette.MutedBrush, Margin = new Thickness(0, 0, 0, 3),
+            };
+            var chips = new WrapPanel { Orientation = Orientation.Horizontal };
+            chips.Children.Add(Chip("NX", b.Nx));
+            chips.Children.Add(Chip($"RELRO:{b.Relro}", b.Relro == "full", b.Relro == "partial"));
+            chips.Children.Add(Chip("canary", b.StackCanary));
+            chips.Children.Add(Chip(b.Stripped ? "stripped" : "unstripped", b.Stripped));
+            chips.Children.Add(Chip("PIE", b.Pie));
+            stack.Children.Add(new StackPanel { Margin = new Thickness(0, 0, 0, 10), Children = { name, chips } });
+        }
+        return stack;
+    }
+
+    // A small posture chip: green when good, yellow when partial, muted-red when weak.
+    private static Control Chip(string text, bool good, bool partial = false)
+    {
+        var brush = good ? Palette.OkBrush : partial ? Palette.WarnBrush : Palette.ErrorBrush;
+        return new Border
+        {
+            Background = Palette.SunkenBrush, CornerRadius = new CornerRadius(4),
+            Padding = new Thickness(7, 2), Margin = new Thickness(0, 0, 6, 4),
+            Child = new TextBlock { Text = text, FontSize = 11, Foreground = brush },
+        };
     }
 
     private static Control BuildArchive(ArchiveInfo archive)

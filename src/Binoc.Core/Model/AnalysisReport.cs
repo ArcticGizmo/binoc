@@ -38,6 +38,9 @@ public sealed class AnalysisReport
     /// <summary>DEX picture — counts vs the 64K method limit, multidex (Android APK/AAB). (M3)</summary>
     public CodeInfo? Code { get; set; }
 
+    /// <summary>Native ELF libraries with ABIs and checksec (Android APK/AAB). (M3)</summary>
+    public NativeLibsInfo? NativeLibs { get; set; }
+
     // Later milestones add: Provisioning (iOS), Code, Obfuscation, SizeBreakdown, NativeLibs,
     // SecurityPosture — each as its own nullable category object, following the same shape.
 

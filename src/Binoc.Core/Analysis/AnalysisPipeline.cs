@@ -20,6 +20,7 @@ public static class AnalysisPipeline
         new IdentityAnalyzer(),
         new SigningAnalyzer(),
         new CodeAnalyzer(),
+        new NativeLibsAnalyzer(),
     };
 
     /// <summary>Analyse the file at <paramref name="path"/> and return a fully-populated report. Throws
