@@ -17,13 +17,25 @@ public sealed class ObfuscationInfo
     /// <summary>The evidence — each signal that fired, with a human-readable detail and its weight.</summary>
     public List<ObfuscationSignal> Signals { get; } = new();
 
-    /// <summary>Fraction of the app's own defined classes whose simple name looks machine-renamed
-    /// (e.g. <c>a</c>, <c>b</c>, <c>ab</c>) — the core name-mangling signal, or null when the DEX couldn't be
-    /// read deeply.</summary>
+    /// <summary>Fraction of the app's own defined <em>symbols</em> (classes + declared methods + fields) whose
+    /// name looks machine-renamed (e.g. <c>a</c>, <c>b</c>, <c>ab</c>) — binoc's obfuscation percentage. Null when
+    /// the DEX couldn't be read deeply. Framework references are excluded, so this tracks the app's own code.</summary>
     public double? MangledNameRatio { get; set; }
 
-    /// <summary>How many defined classes the ratio was computed over (0 when not computed).</summary>
+    /// <summary>How many defined symbols the ratio was computed over (0 when not computed).</summary>
+    public int SymbolsSampled { get; set; }
+
+    /// <summary>How many defined classes were seen (subset of <see cref="SymbolsSampled"/>).</summary>
     public int ClassesSampled { get; set; }
+
+    /// <summary>True when almost all classes were collapsed into a single short package — the fingerprint of
+    /// R8's <c>-repackageclasses</c> (aggressive/"full mode" shrinking). Null when not determinable.</summary>
+    public bool? RepackagedClasses { get; set; }
+
+    /// <summary>True when an R8 deobfuscation map is embedded in the bundle
+    /// (<c>BUNDLE-METADATA/com.android.tools.build.obfuscation/proguard.map</c>) — this is what Play extracts on
+    /// upload to de-obfuscate crash stack traces, without a separate mapping upload. AAB only; null if unknown.</summary>
+    public bool? HasEmbeddedDeobfuscationMap { get; set; }
 
     /// <summary>True when a commercial packer/protector signature matched — the strongest single signal.</summary>
     public bool PackerDetected => Signals.Any(s => s.Kind == SignalKind.Packer);

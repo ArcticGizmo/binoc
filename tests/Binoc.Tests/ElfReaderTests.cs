@@ -108,4 +108,44 @@ public class ElfReaderTests
 
     [Fact]
     public void Non_elf_returns_null() => Assert.Null(ElfReader.Read(Encoding.ASCII.GetBytes("not an elf file at all")));
+
+    // A 64-bit ET_DYN with a single PT_LOAD segment at the given alignment; nothing else the reader needs.
+    private static byte[] BuildElfWithLoadAlign(long align)
+    {
+        const int ehdr = 64, phEnt = 56, phNum = 1;
+        int phoff = ehdr;
+        var d = new byte[phoff + phEnt * phNum];
+
+        d[0] = 0x7f; d[1] = (byte)'E'; d[2] = (byte)'L'; d[3] = (byte)'F';
+        d[4] = 2; d[5] = 1; d[6] = 1;
+        BinaryPrimitives.WriteUInt16LittleEndian(d.AsSpan(16), 3);   // ET_DYN
+        BinaryPrimitives.WriteUInt16LittleEndian(d.AsSpan(18), 183); // AArch64
+        BinaryPrimitives.WriteUInt64LittleEndian(d.AsSpan(32), (ulong)phoff);
+        BinaryPrimitives.WriteUInt64LittleEndian(d.AsSpan(40), 0);   // no section headers
+        BinaryPrimitives.WriteUInt16LittleEndian(d.AsSpan(54), phEnt);
+        BinaryPrimitives.WriteUInt16LittleEndian(d.AsSpan(56), phNum);
+        BinaryPrimitives.WriteUInt16LittleEndian(d.AsSpan(58), 64);
+        BinaryPrimitives.WriteUInt16LittleEndian(d.AsSpan(60), 0);
+
+        BinaryPrimitives.WriteUInt32LittleEndian(d.AsSpan(phoff), 1);              // PT_LOAD
+        BinaryPrimitives.WriteUInt32LittleEndian(d.AsSpan(phoff + 4), 5);          // flags R+X
+        BinaryPrimitives.WriteUInt64LittleEndian(d.AsSpan(phoff + 48), (ulong)align); // p_align
+        return d;
+    }
+
+    [Fact]
+    public void Detects_4kb_page_alignment_as_unsupported()
+    {
+        var info = ElfReader.Read(BuildElfWithLoadAlign(0x1000));
+        Assert.Equal(0x1000, info!.MaxLoadAlign);
+        Assert.False(info.Supports16kPages);
+    }
+
+    [Fact]
+    public void Detects_16kb_page_alignment_as_supported()
+    {
+        var info = ElfReader.Read(BuildElfWithLoadAlign(0x4000));
+        Assert.Equal(0x4000, info!.MaxLoadAlign);
+        Assert.True(info.Supports16kPages);
+    }
 }

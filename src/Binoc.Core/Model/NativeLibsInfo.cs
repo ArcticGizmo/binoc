@@ -11,6 +11,10 @@ public sealed class NativeLibsInfo
 
     /// <summary>Each native binary and its security posture.</summary>
     public List<NativeBinary> Binaries { get; } = new();
+
+    /// <summary>True when every native library is built for 16 KB memory pages (Android 15+ requirement).
+    /// Meaningless when there are no libraries.</summary>
+    public bool AllSupport16kPages => Binaries.Count > 0 && Binaries.All(b => b.Supports16kPages);
 }
 
 /// <summary>One native ELF binary and its checksec.</summary>
@@ -23,6 +27,9 @@ public sealed class NativeLibsInfo
 /// <param name="StackCanary">Stack-protector present.</param>
 /// <param name="Stripped">No symbol table (debug symbols removed).</param>
 /// <param name="Pie">Position-independent (ET_DYN).</param>
+/// <param name="Supports16kPages">Loadable segments aligned to ≥16 KB (loads on 16 KB-page devices).</param>
+/// <param name="LoadAlignmentBytes">Largest PT_LOAD alignment — the page size the library was built for.</param>
 public sealed record NativeBinary(
     string Path, string Abi, string Arch, bool Is64Bit,
-    bool Nx, string Relro, bool StackCanary, bool Stripped, bool Pie);
+    bool Nx, string Relro, bool StackCanary, bool Stripped, bool Pie,
+    bool Supports16kPages, long LoadAlignmentBytes);

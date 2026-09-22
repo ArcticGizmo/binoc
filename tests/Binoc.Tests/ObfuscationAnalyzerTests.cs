@@ -85,6 +85,24 @@ public class ObfuscationAnalyzerTests
     }
 
     [Fact]
+    public void Detects_repackaged_classes()
+    {
+        // 30 single-char classes all in the root package → repackageclasses fingerprint.
+        var descriptors = new List<string>();
+        for (int i = 0; i < 30; i++)
+            descriptors.Add($"L{(char)('a' + i % 26)}{(i >= 26 ? ((char)('a' + i / 26)).ToString() : "")};");
+        var path = WriteApk(("classes.dex", DexTestBuilder.Build(descriptors.ToArray())));
+        try
+        {
+            var report = AnalysisPipeline.Analyze(path);
+            var o = report.Obfuscation!;
+            Assert.True(o.RepackagedClasses);
+            Assert.Contains(o.Signals, s => s.Name == "Repackaged classes");
+        }
+        finally { File.Delete(path); }
+    }
+
+    [Fact]
     public void Small_class_set_is_capped_below_likely()
     {
         // 5 mangled of 5 → ratio 1.0, but too small a sample to call "Likely".

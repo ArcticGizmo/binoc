@@ -26,7 +26,7 @@ public sealed class NativeLibsAnalyzer : IAnalyzer
     {
         var info = new NativeLibsInfo();
         var abis = new HashSet<string>(StringComparer.Ordinal);
-        bool anyUnstripped = false, anyNoCanary = false;
+        bool anyUnstripped = false, anyNoCanary = false, anyNot16k = false;
 
         foreach (var entry in context.Archive.Entries)
         {
@@ -41,10 +41,12 @@ public sealed class NativeLibsAnalyzer : IAnalyzer
 
             abis.Add(abi);
             info.Binaries.Add(new NativeBinary(full, abi, elf.Arch, elf.Is64Bit,
-                elf.Nx, elf.Relro, elf.StackCanary, elf.Stripped, elf.IsPie));
+                elf.Nx, elf.Relro, elf.StackCanary, elf.Stripped, elf.IsPie,
+                elf.Supports16kPages, elf.MaxLoadAlign));
 
             if (!elf.Stripped) anyUnstripped = true;
             if (!elf.StackCanary) anyNoCanary = true;
+            if (!elf.Supports16kPages) anyNot16k = true;
         }
 
         if (info.Binaries.Count == 0) return;
@@ -59,6 +61,10 @@ public sealed class NativeLibsAnalyzer : IAnalyzer
         if (anyNoCanary)
             report.Notes.Add(new ReportNote("native-libs", NoteSeverity.Info,
                 "Some native libraries have no detectable stack canary."));
+        if (anyNot16k)
+            report.Notes.Add(new ReportNote("native-libs", NoteSeverity.Warning,
+                "Some native libraries are built for 4 KB memory pages, not 16 KB — they won't load on 16 KB-page "
+                + "devices (Android 15+ requires 16 KB support for new/updated apps)."));
     }
 
     private static byte[] ReadFully(ZipArchiveEntry entry)

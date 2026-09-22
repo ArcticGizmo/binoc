@@ -2,8 +2,9 @@ namespace Binoc.Core.Model;
 
 /// <summary>
 /// The archive/size walk (findings §"Optimisation / size", the shared "archive walk" module). Cheap,
-/// universal, offline: entry counts, compressed vs uncompressed totals, a per-type size breakdown, and the
-/// newest entry timestamp (provenance-labelled). ZIP-alignment lands as a later field.
+/// universal, offline: entry counts, compressed vs uncompressed totals, and a per-type size breakdown.
+/// (ZIP entry mtimes are deliberately not surfaced — reproducible builds routinely zero or fix them, so they
+/// carry no reliable build-time signal.) ZIP-alignment lands as a later field.
 /// </summary>
 public sealed class ArchiveInfo
 {
@@ -18,10 +19,6 @@ public sealed class ArchiveInfo
 
     /// <summary>Per-type size breakdown, largest compressed bucket first (see <see cref="SizeBucket"/>).</summary>
     public List<SizeBucket> Buckets { get; } = new();
-
-    /// <summary>The newest entry mtime found, with its provenance caveat — or null if none carried a usable
-    /// time. Deliberately <em>not</em> presented as the build time (decision D4).</summary>
-    public TimestampInfo? NewestEntry { get; set; }
 
     /// <summary>ZIP alignment status (APK only — zipalign lets the loader mmap uncompressed entries). Null
     /// when not applicable or not probed.</summary>

@@ -31,10 +31,15 @@ internal static class BinocUi
         Text = text, FontSize = 11, FontWeight = FontWeight.SemiBold, Foreground = Palette.MutedBrush,
     };
 
-    public static TextBlock ValueText(string text) => new()
+    /// <summary>A read-only but <b>selectable/copyable</b> text block — the report is data people want to
+    /// grab (fingerprints, ids, permission names), so value text uses this rather than a plain TextBlock.</summary>
+    public static SelectableTextBlock SelectableText(string text) => new()
     {
         Text = text, FontSize = 14, Foreground = Palette.FgBrush, TextWrapping = TextWrapping.Wrap,
+        SelectionBrush = new SolidColorBrush(Palette.Accent, 0.35),
     };
+
+    public static SelectableTextBlock ValueText(string text) => SelectableText(text);
 
     public static Border Separator() => new()
     {

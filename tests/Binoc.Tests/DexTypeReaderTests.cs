@@ -31,6 +31,43 @@ public class DexTypeReaderTests
         Assert.Equal(3, stats.Value.MangledClasses);
     }
 
+    [Theory]
+    [InlineData("Lcom/example/a;", "com/example")]
+    [InlineData("La;", "")]
+    [InlineData("Lcom/a/b$c;", "com/a")]
+    public void Extracts_package(string descriptor, string pkg)
+        => Assert.Equal(pkg, DexTypeReader.PackageOf(descriptor));
+
+    [Fact]
+    public void Reports_dominant_package_for_repackaged_dex()
+    {
+        // Everything collapsed into the default package (root) — the repackageclasses fingerprint.
+        var dex = DexTestBuilder.Build("La;", "Lb;", "Lc;", "Ld;");
+        var stats = DexTypeReader.Read(dex)!.Value;
+        Assert.Equal("", stats.TopPackage);
+        Assert.Equal(4, stats.TopPackageCount);
+    }
+
+    [Fact]
+    public void Counts_defined_methods_and_fields()
+    {
+        // One class with mangled + readable methods and fields; constructors must be ignored.
+        var dex = DexTestBuilder.BuildClassWithMembers(
+            "Lcom/example/MainActivity;",
+            methodNames: new[] { "a", "b", "onCreate", "<init>" },
+            fieldNames: new[] { "a", "userName" });
+        var s = DexTypeReader.Read(dex)!.Value;
+
+        Assert.Equal(1, s.DefinedClasses);
+        Assert.Equal(0, s.MangledClasses);              // MainActivity isn't mangled
+        Assert.Equal(3, s.DefinedMethods);              // a, b, onCreate — <init> excluded
+        Assert.Equal(2, s.MangledMethods);              // a, b
+        Assert.Equal(2, s.DefinedFields);               // a, userName
+        Assert.Equal(1, s.MangledFields);               // a
+        Assert.Equal(6, s.DefinedSymbols);              // 1 class + 3 methods + 2 fields
+        Assert.Equal(3, s.MangledSymbols);              // a(method), b(method), a(field)
+    }
+
     [Fact]
     public void Rejects_non_dex()
     {

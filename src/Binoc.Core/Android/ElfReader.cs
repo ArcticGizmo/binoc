@@ -11,9 +11,17 @@ namespace Binoc.Core.Android;
 /// </summary>
 public static class ElfReader
 {
-    public sealed record ElfInfo(bool Is64Bit, string Arch, bool Nx, string Relro, bool StackCanary, bool Stripped, bool IsPie);
+    public sealed record ElfInfo(
+        bool Is64Bit, string Arch, bool Nx, string Relro, bool StackCanary, bool Stripped, bool IsPie,
+        long MaxLoadAlign)
+    {
+        /// <summary>True when every loadable segment is aligned to at least 16 KB — the requirement for the
+        /// library to load on a 16 KB-page device (Android 15+). Built for 4 KB pages otherwise.</summary>
+        public bool Supports16kPages => MaxLoadAlign >= 0x4000;
+    }
 
     // Program-header types.
+    private const uint PtLoad = 1;
     private const uint PtDynamic = 2;
     private const uint PtGnuStack = 0x6474e551;
     private const uint PtGnuRelro = 0x6474e552;
@@ -62,27 +70,31 @@ public static class ElfReader
             bool nx = true;          // modern default; only a PT_GNU_STACK with PF_X flips it off
             bool relroSeg = false;
             long dynOff = 0, dynSize = 0;
+            long maxLoadAlign = 0;   // largest PT_LOAD p_align → the page size this .so was built for
 
             for (int i = 0; i < phnum; i++)
             {
                 long p = phoff + (long)i * phentsize;
                 if (p + phentsize > d.Length) break;
                 uint type = BinaryPrimitives.ReadUInt32LittleEndian(d.AsSpan((int)p));
-                uint flags; long off, filesz;
+                uint flags; long off, filesz, align;
                 if (is64)
                 {
                     flags = BinaryPrimitives.ReadUInt32LittleEndian(d.AsSpan((int)p + 4));
                     off = (long)BinaryPrimitives.ReadUInt64LittleEndian(d.AsSpan((int)p + 8));
                     filesz = (long)BinaryPrimitives.ReadUInt64LittleEndian(d.AsSpan((int)p + 32));
+                    align = (long)BinaryPrimitives.ReadUInt64LittleEndian(d.AsSpan((int)p + 48));
                 }
                 else
                 {
                     off = BinaryPrimitives.ReadUInt32LittleEndian(d.AsSpan((int)p + 4));
                     filesz = BinaryPrimitives.ReadUInt32LittleEndian(d.AsSpan((int)p + 16));
                     flags = BinaryPrimitives.ReadUInt32LittleEndian(d.AsSpan((int)p + 24));
+                    align = BinaryPrimitives.ReadUInt32LittleEndian(d.AsSpan((int)p + 28));
                 }
 
-                if (type == PtGnuStack) nx = (flags & PfX) == 0;
+                if (type == PtLoad) maxLoadAlign = Math.Max(maxLoadAlign, align);
+                else if (type == PtGnuStack) nx = (flags & PfX) == 0;
                 else if (type == PtGnuRelro) relroSeg = true;
                 else if (type == PtDynamic) { dynOff = off; dynSize = filesz; }
             }
@@ -93,7 +105,7 @@ public static class ElfReader
             bool stripped = !HasSymtab(d, is64, shoff, shentsize, shnum);
             bool canary = HasStackCanary(d, is64, shoff, shentsize, shnum);
 
-            return new ElfInfo(is64, MachineName(eMachine, is64), nx, relro, canary, stripped, eType == 3 /*ET_DYN*/);
+            return new ElfInfo(is64, MachineName(eMachine, is64), nx, relro, canary, stripped, eType == 3 /*ET_DYN*/, maxLoadAlign);
         }
         catch
         {

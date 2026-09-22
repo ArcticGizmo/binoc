@@ -45,28 +45,54 @@ public sealed class ObfuscationAnalyzer : IAnalyzer
             info.Signals.Add(new ObfuscationSignal(
                 $"Packer: {m.Product}", $"protector artefact “{m.Evidence}” present", SignalKind.Packer, 0.95));
 
-        // ── Stream 2: name-mangling ratio over defined classes ──
-        int defined = 0, mangled = 0, skippedDex = 0;
+        // R8's mapping.txt embedded in the bundle → this is what Play extracts on upload to de-obfuscate
+        // crash traces, no separate deobfuscation upload needed. AAB only.
+        if (context.Format == BinaryFormat.Aab)
+            info.HasEmbeddedDeobfuscationMap = paths.Any(p =>
+                p.EndsWith("com.android.tools.build.obfuscation/proguard.map", StringComparison.OrdinalIgnoreCase));
+
+        // ── Stream 2: name-mangling ratio over defined symbols (+ repackaging fingerprint) ──
+        int classes = 0, symbols = 0, mangledSymbols = 0, skippedDex = 0;
+        var packages = new Dictionary<string, int>(StringComparer.Ordinal);
         foreach (var entry in dexEntries)
         {
             if (entry.Length > MaxDexBytes) { skippedDex++; continue; }
             var stats = DexTypeReader.Read(ReadFully(entry));
             if (stats is not { } s) continue;
-            defined += s.DefinedClasses;
-            mangled += s.MangledClasses;
+            classes += s.DefinedClasses;
+            symbols += s.DefinedSymbols;
+            mangledSymbols += s.MangledSymbols;
+            if (s.TopPackageCount > 0)
+                packages[s.TopPackage] = (packages.TryGetValue(s.TopPackage, out var c) ? c : 0) + s.TopPackageCount;
         }
 
-        if (defined > 0)
+        if (symbols > 0)
         {
-            double ratio = (double)mangled / defined;
+            double ratio = (double)mangledSymbols / symbols;
             info.MangledNameRatio = ratio;
-            info.ClassesSampled = defined;
+            info.SymbolsSampled = symbols;
+            info.ClassesSampled = classes;
 
             if (ratio >= 0.30)
                 info.Signals.Add(new ObfuscationSignal(
-                    "Renamed classes",
-                    $"{mangled:N0} of {defined:N0} defined classes ({ratio:P0}) use short machine names",
+                    "Renamed symbols",
+                    $"{mangledSymbols:N0} of {symbols:N0} defined symbols ({ratio:P0}) use short machine names",
                     SignalKind.NameMangling, ratio));
+
+            // Repackaging: almost every class in one short/empty package.
+            var top = packages.OrderByDescending(kv => kv.Value).FirstOrDefault();
+            if (classes >= MinSampleForConfidence)
+            {
+                double share = (double)top.Value / classes;
+                bool repackaged = share >= 0.80 && (top.Key?.Length ?? 0) <= 3;
+                info.RepackagedClasses = repackaged;
+                if (repackaged)
+                    info.Signals.Add(new ObfuscationSignal(
+                        "Repackaged classes",
+                        $"{share:P0} of classes collapsed into one package (“{(top.Key!.Length == 0 ? "<root>" : top.Key)}”) "
+                        + "— consistent with R8 -repackageclasses / full mode",
+                        SignalKind.NameMangling, Math.Min(1.0, share)));
+            }
         }
 
         if (skippedDex > 0)
@@ -75,7 +101,7 @@ public sealed class ObfuscationAnalyzer : IAnalyzer
                 $"{skippedDex} DEX file(s) exceeded the {MaxDexBytes / (1024 * 1024)} MB deep-read limit; the name ratio may understate obfuscation",
                 SignalKind.Hint, 0.0));
 
-        Score(info, defined);
+        Score(info, symbols);
 
         // Nothing worth surfacing (readable names, no packer) — drop the category.
         if (info.Assessment == ObfuscationAssessment.None && !info.PackerDetected && info.MangledNameRatio is null)
@@ -86,7 +112,7 @@ public sealed class ObfuscationAnalyzer : IAnalyzer
     }
 
     // Turns the collected signals into the coarse assessment + confidence.
-    private static void Score(ObfuscationInfo info, int definedClasses)
+    private static void Score(ObfuscationInfo info, int sampleSize)
     {
         if (info.PackerDetected)
         {
@@ -102,8 +128,8 @@ public sealed class ObfuscationAnalyzer : IAnalyzer
         else if (ratio >= 0.30) info.Assessment = ObfuscationAssessment.Possible;
         else info.Assessment = ObfuscationAssessment.None;
 
-        // A small class set can't carry a strong verdict — cap it and reflect that in the confidence.
-        if (definedClasses is > 0 and < MinSampleForConfidence && info.Assessment == ObfuscationAssessment.Likely)
+        // A small symbol set can't carry a strong verdict — cap it and reflect that in the confidence.
+        if (sampleSize is > 0 and < MinSampleForConfidence && info.Assessment == ObfuscationAssessment.Likely)
         {
             info.Assessment = ObfuscationAssessment.Possible;
             info.Confidence = Math.Min(info.Confidence, 0.5);
@@ -123,7 +149,7 @@ public sealed class ObfuscationAnalyzer : IAnalyzer
                 break;
             case ObfuscationAssessment.Likely:
                 report.Notes.Add(new ReportNote("obfuscation", NoteSeverity.Info,
-                    $"Code looks obfuscated ({info.MangledNameRatio:P0} of classes renamed, confidence "
+                    $"Code looks obfuscated ({info.MangledNameRatio:P0} of symbols renamed, confidence "
                     + $"{info.Confidence:P0}) — consistent with a normal R8/ProGuard release."));
                 break;
         }

@@ -5,8 +5,8 @@ namespace Binoc.Core.Analysis;
 
 /// <summary>
 /// The archive/size walk (M1): the cheapest universal answers, shared across all three formats. Sums
-/// compressed and uncompressed sizes, groups entries into a per-type breakdown, and records the newest
-/// entry mtime with a provenance caveat (never presented as the build time — decision D4).
+/// compressed and uncompressed sizes and groups entries into a per-type breakdown. (ZIP entry mtimes are not
+/// reported — reproducible builds routinely zero them, so they carry no reliable build-time signal.)
 /// </summary>
 public sealed class ArchiveWalkAnalyzer : IAnalyzer
 {
@@ -18,7 +18,6 @@ public sealed class ArchiveWalkAnalyzer : IAnalyzer
     {
         var archive = new ArchiveInfo();
         var byBucket = new Dictionary<string, (long comp, long uncomp, int count)>();
-        DateTimeOffset? newest = null;
 
         foreach (var entry in context.Archive.Entries)
         {
@@ -37,22 +36,11 @@ public sealed class ArchiveWalkAnalyzer : IAnalyzer
                 var cur = byBucket.TryGetValue(bucket, out var v) ? v : default;
                 byBucket[bucket] = (cur.comp + entry.CompressedLength, cur.uncomp + entry.Length, cur.count + 1);
             }
-
-            // ZIP mtimes: track the newest that isn't the DOS-epoch sentinel (1980-01-01), which is what a
-            // reproducible build zeroes them to. A real time here is still only weakly trustworthy.
-            var mtime = entry.LastWriteTime;
-            if (mtime.Year > 1980 && (newest is null || mtime > newest))
-                newest = mtime;
         }
 
         archive.Buckets.AddRange(byBucket
             .Select(kv => new SizeBucket(kv.Key, kv.Value.comp, kv.Value.uncomp, kv.Value.count))
             .OrderByDescending(b => b.CompressedSize));
-
-        if (newest is { } n)
-            archive.NewestEntry = new TimestampInfo(n, "Newest ZIP entry mtime",
-                "ZIP timestamps are frequently zeroed or fixed for reproducible builds — treat as a weak upper "
-                + "bound, not the build time.");
 
         // zipalign is an APK concept (the loader mmaps uncompressed entries from the installed APK).
         if (context.Format == BinaryFormat.Apk && ZipAlignment.Probe(context.FilePath) is { } alignment)
