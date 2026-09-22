@@ -171,7 +171,7 @@ with a screenshot in `./captures/`. Golden-file tests for each format's Identity
 **Exit:** signer + fingerprints + scheme set shown for all three; debug-key and
 expired-cert fixtures assert the right flags. **This is the first "release-worthy" cut.**
 
-### M3 — Format deep-dives (Code + Native libs)
+### M3 — Format deep-dives (Code + Native libs)  ✅ done
 *Goal: the format-specific heavy passes. Split into two parallel tracks.*
 
 - **iOS track:** embedded provisioning profile (CMS/PKCS#7 → XML plist) →

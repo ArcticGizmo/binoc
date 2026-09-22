@@ -145,9 +145,13 @@ internal sealed class MainWindow : Window
         if (report.Code is { } code)
             cards.Children.Add(BinocUi.Card(BuildCode(code)));
 
-        // Native libraries card.
+        // Native libraries card (Android).
         if (report.NativeLibs is { } native)
             cards.Children.Add(BinocUi.Card(BuildNativeLibs(native)));
+
+        // Mach-O card (iOS).
+        if (report.MachO is { } macho)
+            cards.Children.Add(BinocUi.Card(BuildMachO(macho)));
 
         // Archive / size breakdown card.
         if (report.Archive is { } archive)
@@ -363,6 +367,44 @@ internal sealed class MainWindow : Window
             chips.Children.Add(Chip(b.Stripped ? "stripped" : "unstripped", b.Stripped));
             chips.Children.Add(Chip("PIE", b.Pie));
             stack.Children.Add(new StackPanel { Margin = new Thickness(0, 0, 0, 10), Children = { name, chips } });
+        }
+        return stack;
+    }
+
+    private static Control BuildMachO(MachOInfo m)
+    {
+        var stack = new StackPanel();
+        stack.Children.Add(BinocUi.SectionTitle("Mach-O executable"));
+        stack.Children.Add(new TextBlock
+        {
+            Text = m.IsFat ? $"{m.Executable} — universal ({m.Architectures.Count} slices)" : $"{m.Executable} — thin",
+            FontSize = 13, Foreground = Palette.FgBrush, Margin = new Thickness(0, 0, 0, 10), TextWrapping = TextWrapping.Wrap,
+        });
+
+        foreach (var a in m.Architectures)
+        {
+            var name = new TextBlock { Text = a.Arch, FontSize = 12, Foreground = Palette.MutedBrush, Margin = new Thickness(0, 0, 0, 3) };
+            var chips = new WrapPanel();
+            chips.Children.Add(Chip("PIE", a.Pie));
+            // Encrypted is expected/good for a store binary; show it neutrally as present.
+            chips.Children.Add(Chip(a.Encrypted ? "encrypted" : "not encrypted", a.Encrypted, partial: !a.Encrypted));
+            chips.Children.Add(Chip("code sig", a.HasCodeSignature));
+            chips.Children.Add(Chip("canary", a.StackCanary));
+            stack.Children.Add(new StackPanel { Margin = new Thickness(0, 0, 0, 10), Children = { name, chips } });
+        }
+
+        if (m.LinkedLibraries.Count > 0)
+        {
+            stack.Children.Add(new TextBlock
+            {
+                Text = $"LINKED ({m.LinkedLibraries.Count})", FontSize = 11, FontWeight = FontWeight.SemiBold,
+                Foreground = Palette.MutedBrush, Margin = new Thickness(0, 4, 0, 6),
+            });
+            stack.Children.Add(new TextBlock
+            {
+                Text = string.Join("\n", m.LinkedLibraries), FontSize = 12, Foreground = Palette.FgBrush,
+                TextWrapping = TextWrapping.Wrap,
+            });
         }
         return stack;
     }

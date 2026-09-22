@@ -44,6 +44,9 @@ public sealed class AnalysisReport
     /// <summary>Embedded provisioning profile — distribution type, team, entitlements (iOS only). (M3)</summary>
     public ProvisioningInfo? Provisioning { get; set; }
 
+    /// <summary>Mach-O executable — archs, PIE, FairPlay encryption, code signature (iOS only). (M3)</summary>
+    public MachOInfo? MachO { get; set; }
+
     // Later milestones add: Provisioning (iOS), Code, Obfuscation, SizeBreakdown, NativeLibs,
     // SecurityPosture — each as its own nullable category object, following the same shape.
 
