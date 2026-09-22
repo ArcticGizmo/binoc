@@ -129,7 +129,11 @@ internal sealed class MainWindow : Window
         // Summary card.
         cards.Children.Add(BinocUi.Card(BuildSummary(report)));
 
-        // Notes card (M0's real output; category cards grow here from M1).
+        // Archive / size breakdown card.
+        if (report.Archive is { } archive)
+            cards.Children.Add(BinocUi.Card(BuildArchive(archive)));
+
+        // Notes card (degradation / context).
         if (report.Notes.Count > 0)
             cards.Children.Add(BinocUi.Card(BuildNotes(report)));
 
@@ -172,6 +176,93 @@ internal sealed class MainWindow : Window
         stack.Children.Add(BinocUi.SectionTitle("Summary"));
         stack.Children.Add(grid);
         return stack;
+    }
+
+    private static Control BuildArchive(ArchiveInfo archive)
+    {
+        var stack = new StackPanel();
+        stack.Children.Add(BinocUi.SectionTitle("Archive & size"));
+
+        var top = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*"), RowSpacing = 8, ColumnSpacing = 16 };
+        void Row(string label, string value)
+        {
+            int r = top.RowDefinitions.Count;
+            top.RowDefinitions.Add(new RowDefinition(GridLength.Auto));
+            var l = BinocUi.FieldLabel(label); l.VerticalAlignment = VerticalAlignment.Center;
+            var v = BinocUi.ValueText(value);
+            Grid.SetRow(l, r); Grid.SetColumn(l, 0);
+            Grid.SetRow(v, r); Grid.SetColumn(v, 1);
+            top.Children.Add(l); top.Children.Add(v);
+        }
+        Row("ENTRIES", $"{archive.EntryCount:N0}");
+        Row("DOWNLOAD", $"{HumanSize(archive.CompressedSize)}  compressed");
+        Row("INSTALLED", $"{HumanSize(archive.UncompressedSize)}  uncompressed");
+        stack.Children.Add(top);
+
+        // Per-type breakdown: a labelled bar per bucket, sized by share of the compressed total.
+        if (archive.Buckets.Count > 0)
+        {
+            stack.Children.Add(new TextBlock
+            {
+                Text = "BY TYPE", FontSize = 11, FontWeight = FontWeight.SemiBold, Foreground = Palette.MutedBrush,
+                Margin = new Thickness(0, 14, 0, 8),
+            });
+            long total = Math.Max(1, archive.Buckets.Sum(b => b.CompressedSize));
+            foreach (var b in archive.Buckets)
+                stack.Children.Add(BuildBucketRow(b, total));
+        }
+
+        if (archive.NewestEntry is { } ts)
+        {
+            stack.Children.Add(BinocUi.Separator());
+            stack.Children.Add(new TextBlock
+            {
+                Text = $"Newest entry: {ts.Value:yyyy-MM-dd HH:mm} ({ts.Source})",
+                FontSize = 12, Foreground = Palette.FgBrush, TextWrapping = TextWrapping.Wrap,
+            });
+            stack.Children.Add(new TextBlock
+            {
+                Text = ts.ProvenanceNote, FontSize = 11, Foreground = Palette.MutedBrush,
+                TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 2, 0, 0),
+            });
+        }
+
+        return stack;
+    }
+
+    private static Control BuildBucketRow(SizeBucket b, long total)
+    {
+        double share = (double)b.CompressedSize / total;
+
+        var header = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto") };
+        var name = new TextBlock { Text = b.Label, FontSize = 13, Foreground = Palette.FgBrush };
+        var size = new TextBlock
+        {
+            Text = $"{HumanSize(b.CompressedSize)}  ·  {b.EntryCount:N0}", FontSize = 12, Foreground = Palette.MutedBrush,
+        };
+        Grid.SetColumn(name, 0); Grid.SetColumn(size, 1);
+        header.Children.Add(name); header.Children.Add(size);
+
+        // A thin proportional bar under the label.
+        var track = new Border
+        {
+            Height = 6, CornerRadius = new CornerRadius(3), Background = Palette.SunkenBrush,
+            Margin = new Thickness(0, 4, 0, 0), HorizontalAlignment = HorizontalAlignment.Stretch,
+            Child = new Border
+            {
+                Height = 6, CornerRadius = new CornerRadius(3), Background = Palette.AccentBrush,
+                HorizontalAlignment = HorizontalAlignment.Left, MinWidth = 2,
+                Width = double.NaN, Tag = share,
+            },
+        };
+        // Width the fill proportionally once the track has laid out.
+        track.LayoutUpdated += (_, _) =>
+        {
+            if (track.Child is Border fill && track.Bounds.Width > 0)
+                fill.Width = Math.Max(2, track.Bounds.Width * share);
+        };
+
+        return new StackPanel { Margin = new Thickness(0, 0, 0, 10), Children = { header, track } };
     }
 
     private static Control BuildNotes(AnalysisReport report)

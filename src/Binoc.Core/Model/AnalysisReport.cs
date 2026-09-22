@@ -26,6 +26,9 @@ public sealed class AnalysisReport
 
     // ── The 8 shared categories (findings §"The 8 shared categories"). Filled from M1 on. ──
 
+    /// <summary>Entry counts, compressed/uncompressed totals, per-type size breakdown. (M1)</summary>
+    public ArchiveInfo? Archive { get; set; }
+
     /// <summary>Package/bundle id, versions, SDK levels, debug-vs-release, build time. (M1)</summary>
     public IdentityInfo? Identity { get; set; }
 

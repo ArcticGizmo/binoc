@@ -35,7 +35,11 @@ public class AnalysisPipelineTests
             Assert.Equal(BinaryFormat.Apk, report.Format);
             Assert.Equal(Path.GetFileName(path), report.FileName);
             Assert.True(report.FileSizeBytes > 0);
-            Assert.Contains(report.Notes, n => n.Severity == NoteSeverity.Info && n.Message.Contains("APK"));
+
+            Assert.NotNull(report.Archive);
+            Assert.Equal(2, report.Archive!.EntryCount);
+            Assert.Contains(report.Archive.Buckets, b => b.Label == "DEX code");
+            Assert.Contains(report.Archive.Buckets, b => b.Label == "Manifest");
         }
         finally
         {

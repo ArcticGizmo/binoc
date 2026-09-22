@@ -13,11 +13,10 @@ namespace Binoc.Core.Analysis;
 /// </summary>
 public static class AnalysisPipeline
 {
-    /// <summary>The registered passes, in run order. M0 ships only the placeholder; M1+ prepend the real
-    /// archive-walk and identity passes here.</summary>
+    /// <summary>The registered passes, in run order. M2+ append signing/provisioning/etc. here.</summary>
     private static readonly IReadOnlyList<IAnalyzer> Analyzers = new IAnalyzer[]
     {
-        new PlaceholderAnalyzer(),
+        new ArchiveWalkAnalyzer(),
     };
 
     /// <summary>Analyse the file at <paramref name="path"/> and return a fully-populated report. Throws
