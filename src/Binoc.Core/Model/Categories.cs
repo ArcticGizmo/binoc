@@ -19,6 +19,30 @@ public sealed class IdentityInfo
 
     /// <summary>Build number (Android <c>versionCode</c>, iOS <c>CFBundleVersion</c>).</summary>
     public string? VersionCode { get; set; }
+
+    // ── Android ──
+    /// <summary>Minimum supported SDK level (Android <c>minSdkVersion</c>).</summary>
+    public string? MinSdk { get; set; }
+
+    /// <summary>Target SDK level (Android <c>targetSdkVersion</c>).</summary>
+    public string? TargetSdk { get; set; }
+
+    /// <summary>Compile SDK level, when present (Android <c>compileSdkVersion</c>).</summary>
+    public string? CompileSdk { get; set; }
+
+    /// <summary>Whether the app is marked debuggable — a release build should be false/absent.</summary>
+    public bool? IsDebuggable { get; set; }
+
+    // ── iOS ──
+    /// <summary>Minimum OS version (iOS <c>MinimumOSVersion</c>).</summary>
+    public string? MinimumOsVersion { get; set; }
+
+    /// <summary>Supported device family (iOS <c>UIDeviceFamily</c>: iPhone/iPad).</summary>
+    public string? DeviceFamily { get; set; }
+
+    /// <summary>Build provenance strings (iOS <c>DTSDKName</c>/<c>DTXcode</c>, Android build fingerprint) — a
+    /// weak proxy for build time (decision D4).</summary>
+    public string? BuildProvenance { get; set; }
 }
 
 /// <summary>

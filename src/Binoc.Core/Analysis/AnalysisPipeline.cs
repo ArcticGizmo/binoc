@@ -17,6 +17,7 @@ public static class AnalysisPipeline
     private static readonly IReadOnlyList<IAnalyzer> Analyzers = new IAnalyzer[]
     {
         new ArchiveWalkAnalyzer(),
+        new IdentityAnalyzer(),
     };
 
     /// <summary>Analyse the file at <paramref name="path"/> and return a fully-populated report. Throws

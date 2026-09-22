@@ -129,6 +129,10 @@ internal sealed class MainWindow : Window
         // Summary card.
         cards.Children.Add(BinocUi.Card(BuildSummary(report)));
 
+        // Identity card.
+        if (report.Identity is { } identity)
+            cards.Children.Add(BinocUi.Card(BuildIdentity(identity)));
+
         // Archive / size breakdown card.
         if (report.Archive is { } archive)
             cards.Children.Add(BinocUi.Card(BuildArchive(archive)));
@@ -174,6 +178,43 @@ internal sealed class MainWindow : Window
 
         var stack = new StackPanel();
         stack.Children.Add(BinocUi.SectionTitle("Summary"));
+        stack.Children.Add(grid);
+        return stack;
+    }
+
+    private static Control BuildIdentity(IdentityInfo id)
+    {
+        var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*"), RowSpacing = 8, ColumnSpacing = 16 };
+        void Row(string label, string? value, IBrush? valueBrush = null)
+        {
+            if (string.IsNullOrEmpty(value)) return;
+            int r = grid.RowDefinitions.Count;
+            grid.RowDefinitions.Add(new RowDefinition(GridLength.Auto));
+            var l = BinocUi.FieldLabel(label); l.VerticalAlignment = VerticalAlignment.Center;
+            var v = BinocUi.ValueText(value);
+            if (valueBrush is not null) v.Foreground = valueBrush;
+            Grid.SetRow(l, r); Grid.SetColumn(l, 0);
+            Grid.SetRow(v, r); Grid.SetColumn(v, 1);
+            grid.Children.Add(l); grid.Children.Add(v);
+        }
+
+        Row("PACKAGE", id.PackageId);
+        var version = id.VersionName is { } vn
+            ? (id.VersionCode is { } vc ? $"{vn}  (build {vc})" : vn)
+            : id.VersionCode is { } vcOnly ? $"build {vcOnly}" : null;
+        Row("VERSION", version);
+        Row("MIN SDK", id.MinSdk);
+        Row("TARGET SDK", id.TargetSdk);
+        Row("COMPILE SDK", id.CompileSdk);
+        Row("MIN iOS", id.MinimumOsVersion);
+        Row("DEVICE FAMILY", id.DeviceFamily);
+        Row("BUILD", id.BuildProvenance);
+        if (id.IsDebuggable is { } dbg)
+            Row("BUILD TYPE", dbg ? "Debuggable" : "Release (not debuggable)",
+                dbg ? Palette.WarnBrush : Palette.OkBrush);
+
+        var stack = new StackPanel();
+        stack.Children.Add(BinocUi.SectionTitle("Identity"));
         stack.Children.Add(grid);
         return stack;
     }
