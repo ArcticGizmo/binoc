@@ -50,8 +50,11 @@ public sealed class AnalysisReport
     /// <summary>Permissions, exported components, cleartext/ATS, secrets, privacy manifest. (M4)</summary>
     public SecurityPostureInfo? SecurityPosture { get; set; }
 
-    // Later milestones add: Provisioning (iOS), Code, Obfuscation, SizeBreakdown, NativeLibs,
-    // SecurityPosture — each as its own nullable category object, following the same shape.
+    /// <summary>Obfuscation / packing assessment with confidence + signals (Android APK/AAB). (M5)</summary>
+    public ObfuscationInfo? Obfuscation { get; set; }
+
+    /// <summary>AAB per-device download-size estimate and universal-APK saving (AAB only). (M5)</summary>
+    public BundleSizeInfo? BundleSize { get; set; }
 
     /// <summary>Per-category notes: informational context, degradation warnings, and hard errors from
     /// analysers that failed (decision D3 — a failed pass records here and the rest still run).</summary>

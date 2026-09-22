@@ -149,6 +149,10 @@ internal sealed class MainWindow : Window
         if (report.Code is { } code)
             cards.Children.Add(BinocUi.Card(BuildCode(code)));
 
+        // Obfuscation / packing card (Android).
+        if (report.Obfuscation is { } obf)
+            cards.Children.Add(BinocUi.Card(BuildObfuscation(obf)));
+
         // Native libraries card (Android).
         if (report.NativeLibs is { } native)
             cards.Children.Add(BinocUi.Card(BuildNativeLibs(native)));
@@ -156,6 +160,10 @@ internal sealed class MainWindow : Window
         // Mach-O card (iOS).
         if (report.MachO is { } macho)
             cards.Children.Add(BinocUi.Card(BuildMachO(macho)));
+
+        // AAB per-device sizing card.
+        if (report.BundleSize is { } bundle)
+            cards.Children.Add(BinocUi.Card(BuildBundleSize(bundle)));
 
         // Archive / size breakdown card.
         if (report.Archive is { } archive)
@@ -442,6 +450,138 @@ internal sealed class MainWindow : Window
         stack.Children.Add(BinocUi.SectionTitle("Code (DEX)"));
         stack.Children.Add(grid);
         return stack;
+    }
+
+    private static Control BuildObfuscation(ObfuscationInfo o)
+    {
+        var stack = new StackPanel();
+        stack.Children.Add(BinocUi.SectionTitle("Obfuscation & packing"));
+
+        // Headline: assessment + confidence, coloured by how transformed the code is.
+        var (label, brush) = o.Assessment switch
+        {
+            ObfuscationAssessment.Packed => ("Packed / protected", Palette.ErrorBrush),
+            ObfuscationAssessment.Likely => ("Likely obfuscated", Palette.WarnBrush),
+            ObfuscationAssessment.Possible => ("Possibly obfuscated", Palette.WarnBrush),
+            _ => ("No obfuscation detected", Palette.OkBrush),
+        };
+
+        var headline = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 10, Margin = new Thickness(0, 0, 0, 4) };
+        headline.Children.Add(new TextBlock { Text = label, FontSize = 15, FontWeight = FontWeight.SemiBold, Foreground = brush, VerticalAlignment = VerticalAlignment.Center });
+        headline.Children.Add(new TextBlock { Text = $"confidence {o.Confidence:P0}", FontSize = 12, Foreground = Palette.MutedBrush, VerticalAlignment = VerticalAlignment.Center });
+        stack.Children.Add(headline);
+
+        if (o.MangledNameRatio is { } ratio)
+            stack.Children.Add(new TextBlock
+            {
+                Text = $"{ratio:P0} of {o.ClassesSampled:N0} defined classes use short machine names.",
+                FontSize = 12, Foreground = Palette.MutedBrush, TextWrapping = TextWrapping.Wrap,
+            });
+
+        // Evidence: one line per signal.
+        if (o.Signals.Count > 0)
+        {
+            stack.Children.Add(PostureLabel("SIGNALS"));
+            foreach (var s in o.Signals)
+            {
+                var sBrush = s.Kind == SignalKind.Packer ? Palette.ErrorBrush
+                    : s.Kind == SignalKind.NameMangling ? Palette.WarnBrush : Palette.MutedBrush;
+                stack.Children.Add(new TextBlock
+                {
+                    Text = $"• {s.Name} — {s.Detail}", FontSize = 12, Foreground = sBrush, TextWrapping = TextWrapping.Wrap,
+                    Margin = new Thickness(0, 0, 0, 2),
+                });
+            }
+        }
+
+        stack.Children.Add(new TextBlock
+        {
+            Text = "Heuristic — a hedged assessment from signals, not a definitive verdict.",
+            FontSize = 11, Foreground = Palette.MutedBrush, FontStyle = FontStyle.Italic,
+            TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 8, 0, 0),
+        });
+        return stack;
+    }
+
+    private static Control BuildBundleSize(BundleSizeInfo b)
+    {
+        var stack = new StackPanel();
+        stack.Children.Add(BinocUi.SectionTitle("Per-device download size (estimate)"));
+
+        var dims = b.SplitDimensions.Count > 0 ? string.Join(", ", b.SplitDimensions) : "none";
+        stack.Children.Add(new TextBlock
+        {
+            Text = $"Splits by: {dims}" + (b.DimensionsFromConfig ? "  (from BundleConfig.pb)" : "  (bundletool defaults assumed)"),
+            FontSize = 12, Foreground = Palette.MutedBrush, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 10),
+        });
+
+        // Device estimate table: profile · abi/density/lang · download · saving.
+        var grid = new Grid
+        {
+            ColumnDefinitions = new ColumnDefinitions("*,Auto,Auto,Auto"),
+            RowSpacing = 6, ColumnSpacing = 16,
+        };
+        void Cell(int r, int c, string text, IBrush brush, bool header = false)
+        {
+            var t = new TextBlock
+            {
+                Text = text, FontSize = header ? 11 : 13, Foreground = brush,
+                FontWeight = header ? FontWeight.SemiBold : FontWeight.Normal,
+                HorizontalAlignment = c == 0 ? HorizontalAlignment.Left : HorizontalAlignment.Right,
+            };
+            Grid.SetRow(t, r); Grid.SetColumn(t, c);
+            grid.Children.Add(t);
+        }
+
+        grid.RowDefinitions.Add(new RowDefinition(GridLength.Auto));
+        Cell(0, 0, "DEVICE", Palette.MutedBrush, header: true);
+        Cell(0, 1, "CONFIG", Palette.MutedBrush, header: true);
+        Cell(0, 2, "DOWNLOAD", Palette.MutedBrush, header: true);
+        Cell(0, 3, "SAVING", Palette.MutedBrush, header: true);
+
+        int row = 1;
+        foreach (var d in b.Devices)
+        {
+            grid.RowDefinitions.Add(new RowDefinition(GridLength.Auto));
+            Cell(row, 0, d.Profile, Palette.FgBrush);
+            Cell(row, 1, $"{d.Abi} · {d.Density} · {d.Language}", Palette.MutedBrush);
+            Cell(row, 2, HumanSize(d.DownloadBytes), Palette.FgBrush);
+            Cell(row, 3, $"−{d.SavingsFraction:P0}", d.SavingsFraction > 0.01 ? Palette.OkBrush : Palette.MutedBrush);
+            row++;
+        }
+        stack.Children.Add(grid);
+
+        stack.Children.Add(BinocUi.Separator());
+        stack.Children.Add(new TextBlock
+        {
+            Text = $"Universal APK (all ABIs/densities/languages): {HumanSize(b.UniversalApkBytes)}",
+            FontSize = 12, Foreground = Palette.FgBrush, TextWrapping = TextWrapping.Wrap,
+        });
+
+        // The dimension breakdowns, compact.
+        if (b.Abis.Count > 0)
+            stack.Children.Add(DimensionLine("ABIs", b.Abis));
+        if (b.Densities.Count > 0)
+            stack.Children.Add(DimensionLine("Densities", b.Densities));
+        if (b.Languages.Count > 0)
+            stack.Children.Add(DimensionLine("Languages", b.Languages));
+
+        stack.Children.Add(new TextBlock
+        {
+            Text = "Estimate from compressed entry sizes — binoc doesn't run bundletool; Play's actual splits may differ.",
+            FontSize = 11, Foreground = Palette.MutedBrush, FontStyle = FontStyle.Italic,
+            TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 8, 0, 0),
+        });
+        return stack;
+    }
+
+    private static Control DimensionLine(string label, System.Collections.Generic.List<DimensionSplit> splits)
+    {
+        var text = string.Join(", ", splits.Select(s => $"{s.Name} ({HumanSize(s.Bytes)})"));
+        var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Margin = new Thickness(0, 6, 0, 0) };
+        row.Children.Add(new TextBlock { Text = label, FontSize = 11, FontWeight = FontWeight.SemiBold, Foreground = Palette.MutedBrush, VerticalAlignment = VerticalAlignment.Top });
+        row.Children.Add(new TextBlock { Text = text, FontSize = 12, Foreground = Palette.FgBrush, TextWrapping = TextWrapping.Wrap });
+        return row;
     }
 
     private static Control BuildNativeLibs(NativeLibsInfo n)

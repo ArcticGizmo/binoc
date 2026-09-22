@@ -199,7 +199,7 @@ people/agents in parallel — they touch disjoint analysers.
 
 **Exit:** posture findings render with severity; permission/ATS fixtures asserted.
 
-### M5 — Obfuscation heuristics & AAB per-device sizing
+### M5 — Obfuscation heuristics & AAB per-device sizing  ✅ done
 *Goal: the two genuinely hard, judgement-based passes.*
 
 - **Obfuscation/packing** (D4): R8/ProGuard vs DexGuard/packer signals →

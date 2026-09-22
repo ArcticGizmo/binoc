@@ -24,6 +24,8 @@ public static class AnalysisPipeline
         new ProvisioningAnalyzer(),
         new MachOAnalyzer(),
         new PostureAnalyzer(),
+        new ObfuscationAnalyzer(),
+        new BundleSizeAnalyzer(),
     };
 
     /// <summary>Analyse the file at <paramref name="path"/> and return a fully-populated report. Throws
