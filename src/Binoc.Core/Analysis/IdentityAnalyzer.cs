@@ -22,8 +22,8 @@ public sealed class IdentityAnalyzer : IAnalyzer
         switch (context.Format)
         {
             case BinaryFormat.Apk: AnalyzeApk(context, report); break;
+            case BinaryFormat.Aab: AnalyzeAab(context, report); break;
             case BinaryFormat.Ipa: AnalyzeIpa(context, report); break;
-            // AAB identity lands in the following M1 step.
         }
     }
 
@@ -96,37 +96,61 @@ public sealed class IdentityAnalyzer : IAnalyzer
             return;
         }
 
-        var elements = AxmlReader.Parse(ReadFully(entry));
-        if (elements.Count == 0)
-        {
+        var elements = AxmlReader.Parse(ReadFully(entry))
+            .Select(e => (e.Name, e.Attributes));
+        if (!BuildAndroidIdentity(elements, report))
             report.Notes.Add(new ReportNote("identity", NoteSeverity.Warning,
                 "AndroidManifest.xml couldn't be decoded as binary XML."));
+    }
+
+    private static void AnalyzeAab(AnalysisContext context, AnalysisReport report)
+    {
+        // The AAB base module carries the protobuf-encoded manifest.
+        var entry = context.Archive.GetEntry("base/manifest/AndroidManifest.xml");
+        if (entry is null)
+        {
+            report.Notes.Add(new ReportNote("identity", NoteSeverity.Warning,
+                "No base/manifest/AndroidManifest.xml found in the bundle."));
             return;
         }
 
-        var identity = new IdentityInfo();
+        var elements = PbManifestReader.Parse(ReadFully(entry))
+            .Select(e => (e.Name, e.Attributes));
+        if (!BuildAndroidIdentity(elements, report))
+            report.Notes.Add(new ReportNote("identity", NoteSeverity.Warning,
+                "The bundle's protobuf manifest couldn't be decoded."));
+    }
 
-        var manifest = FindElement(elements, "manifest");
-        if (manifest is not null)
+    // Shared Android identity extraction over a manifest element list (APK: AXML; AAB: protobuf).
+    private static bool BuildAndroidIdentity(
+        IEnumerable<(string Name, IReadOnlyDictionary<string, string> Attrs)> elements, AnalysisReport report)
+    {
+        var list = elements.ToList();
+        if (list.Count == 0) return false;
+
+        (string, IReadOnlyDictionary<string, string>)? Find(string name)
         {
-            identity.PackageId = Get(manifest, "package");
-            identity.VersionName = Get(manifest, "versionName");
-            identity.VersionCode = Get(manifest, "versionCode");
-            identity.CompileSdk = Get(manifest, "compileSdkVersion");
+            foreach (var e in list)
+                if (string.Equals(e.Name, name, StringComparison.Ordinal)) return e;
+            return null;
         }
+        static string? Get((string, IReadOnlyDictionary<string, string>)? el, string attr)
+            => el is { } e && e.Item2.TryGetValue(attr, out var v) && v.Length > 0 ? v : null;
 
-        var usesSdk = FindElement(elements, "uses-sdk");
-        if (usesSdk is not null)
+        var manifest = Find("manifest");
+        var usesSdk = Find("uses-sdk");
+        var application = Find("application");
+
+        var identity = new IdentityInfo
         {
-            identity.MinSdk = Get(usesSdk, "minSdkVersion");
-            identity.TargetSdk = Get(usesSdk, "targetSdkVersion");
-        }
-        // aapt2 may fold min/target SDK onto <manifest> via resource ids instead of a <uses-sdk> element.
-        identity.MinSdk ??= manifest is not null ? Get(manifest, "minSdkVersion") : null;
-        identity.TargetSdk ??= manifest is not null ? Get(manifest, "targetSdkVersion") : null;
-
-        var application = FindElement(elements, "application");
-        if (application is not null && Get(application, "debuggable") is { } dbg)
+            PackageId = Get(manifest, "package"),
+            VersionName = Get(manifest, "versionName"),
+            VersionCode = Get(manifest, "versionCode"),
+            CompileSdk = Get(manifest, "compileSdkVersion"),
+            MinSdk = Get(usesSdk, "minSdkVersion") ?? Get(manifest, "minSdkVersion"),
+            TargetSdk = Get(usesSdk, "targetSdkVersion") ?? Get(manifest, "targetSdkVersion"),
+        };
+        if (Get(application, "debuggable") is { } dbg)
             identity.IsDebuggable = string.Equals(dbg, "true", StringComparison.OrdinalIgnoreCase);
 
         report.Identity = identity;
@@ -134,13 +158,8 @@ public sealed class IdentityAnalyzer : IAnalyzer
         if (identity.IsDebuggable == true)
             report.Notes.Add(new ReportNote("identity", NoteSeverity.Warning,
                 "android:debuggable is set — this is a debug configuration, not a release build."));
+        return true;
     }
-
-    private static AxmlReader.Element? FindElement(IReadOnlyList<AxmlReader.Element> elements, string name)
-        => elements.FirstOrDefault(e => string.Equals(e.Name, name, StringComparison.Ordinal));
-
-    private static string? Get(AxmlReader.Element el, string attr)
-        => el.Attributes.TryGetValue(attr, out var v) && v.Length > 0 ? v : null;
 
     private static byte[] ReadFully(ZipArchiveEntry entry)
     {

@@ -1,6 +1,7 @@
 using System.IO.Compression;
 using System.Text;
 using Binoc.Core.Analysis;
+using Binoc.Core.Model;
 using Xunit;
 
 namespace Binoc.Tests;
@@ -102,6 +103,36 @@ public class IdentityAnalyzerTests
             Assert.Equal("15.0", report.Identity.MinimumOsVersion);
             Assert.Equal("iPhone/iPod, iPad", report.Identity.DeviceFamily);
             Assert.Contains("iphoneos17.0", report.Identity.BuildProvenance);
+        }
+        finally { File.Delete(path); }
+    }
+
+    private static string WriteAab(byte[] protoManifest)
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"binoc-id-{Guid.NewGuid():N}.aab");
+        using var fs = File.Create(path);
+        using var zip = new ZipArchive(fs, ZipArchiveMode.Create);
+        using (var s = zip.CreateEntry("base/manifest/AndroidManifest.xml").Open()) s.Write(protoManifest);
+        using (var c = zip.CreateEntry("BundleConfig.pb").Open()) c.Write(new byte[] { 0 });
+        using (var d = zip.CreateEntry("base/dex/classes.dex").Open()) d.Write(new byte[] { 1 });
+        return path;
+    }
+
+    [Fact]
+    public void Aab_identity_is_extracted_from_the_protobuf_manifest()
+    {
+        var path = WriteAab(PbManifestReaderTests.Sample(debuggable: false));
+        try
+        {
+            var report = AnalysisPipeline.Analyze(path);
+
+            Assert.Equal(BinaryFormat.Aab, report.Format);
+            Assert.NotNull(report.Identity);
+            Assert.Equal("com.example.bundle", report.Identity!.PackageId);
+            Assert.Equal("88", report.Identity.VersionCode);
+            Assert.Equal("9.9", report.Identity.VersionName);
+            Assert.Equal("24", report.Identity.MinSdk);
+            Assert.Equal("34", report.Identity.TargetSdk);
         }
         finally { File.Delete(path); }
     }
