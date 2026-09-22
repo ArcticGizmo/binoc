@@ -1,3 +1,4 @@
+using Binoc.Core.Android;
 using Binoc.Core.Model;
 
 namespace Binoc.Core.Analysis;
@@ -52,6 +53,19 @@ public sealed class ArchiveWalkAnalyzer : IAnalyzer
             archive.NewestEntry = new TimestampInfo(n, "Newest ZIP entry mtime",
                 "ZIP timestamps are frequently zeroed or fixed for reproducible builds — treat as a weak upper "
                 + "bound, not the build time.");
+
+        // zipalign is an APK concept (the loader mmaps uncompressed entries from the installed APK).
+        if (context.Format == BinaryFormat.Apk && ZipAlignment.Probe(context.FilePath) is { } alignment)
+        {
+            archive.Alignment = alignment;
+            if (!alignment.Aligned4)
+                report.Notes.Add(new ReportNote("archive", NoteSeverity.Warning,
+                    $"{alignment.MisalignedCount} uncompressed entr{(alignment.MisalignedCount == 1 ? "y is" : "ies are")} "
+                    + "not 4-byte aligned — the APK isn't zipaligned."));
+            if (alignment.NativeLibs16k == false)
+                report.Notes.Add(new ReportNote("archive", NoteSeverity.Warning,
+                    "Uncompressed native libraries are not 16 KB-aligned — required for 16 KB-page devices (Android 15+)."));
+        }
 
         report.Archive = archive;
     }

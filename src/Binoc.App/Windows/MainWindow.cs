@@ -253,6 +253,21 @@ internal sealed class MainWindow : Window
                 stack.Children.Add(BuildBucketRow(b, total));
         }
 
+        if (archive.Alignment is { } al)
+        {
+            stack.Children.Add(BinocUi.Separator());
+            string align4 = al.Aligned4 ? "4-byte aligned (zipaligned)" : $"not zipaligned ({al.MisalignedCount} misaligned)";
+            var row = new TextBlock { Text = $"Alignment: {align4}", FontSize = 12, TextWrapping = TextWrapping.Wrap };
+            row.Foreground = al.Aligned4 ? Palette.OkBrush : Palette.WarnBrush;
+            stack.Children.Add(row);
+            if (al.NativeLibs16k is { } n16)
+                stack.Children.Add(new TextBlock
+                {
+                    Text = n16 ? "Native libraries: 16 KB-aligned" : "Native libraries: not 16 KB-aligned (Android 15+ devices)",
+                    FontSize = 12, Foreground = n16 ? Palette.OkBrush : Palette.WarnBrush, TextWrapping = TextWrapping.Wrap,
+                });
+        }
+
         if (archive.NewestEntry is { } ts)
         {
             stack.Children.Add(BinocUi.Separator());
