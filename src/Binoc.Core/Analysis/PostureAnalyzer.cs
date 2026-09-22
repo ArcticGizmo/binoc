@@ -3,6 +3,7 @@ using System.Text.RegularExpressions;
 using Binoc.Core.Android;
 using Binoc.Core.Ios;
 using Binoc.Core.Model;
+using Binoc.Core.Security;
 
 namespace Binoc.Core.Analysis;
 
@@ -33,6 +34,16 @@ public sealed class PostureAnalyzer : IAnalyzer
                 AnalyzeIos(context, report);
                 break;
         }
+
+        // Cross-format heuristic: scan text resources for embedded secrets (kind + file only).
+        var posture = report.SecurityPosture ??= new SecurityPostureInfo();
+        SecretScanner.Scan(context.Archive, posture.PotentialSecrets);
+        if (posture.PotentialSecrets.Count > 0)
+            report.Notes.Add(new ReportNote("posture", NoteSeverity.Warning,
+                $"{posture.PotentialSecrets.Count} potential embedded secret(s) found by pattern scan — heuristic, verify before acting."));
+
+        // Drop the category entirely if nothing was found.
+        if (report.SecurityPosture is { HasAny: false }) report.SecurityPosture = null;
     }
 
     private static readonly Regex AppInfoPlist =

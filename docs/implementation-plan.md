@@ -188,7 +188,7 @@ expired-cert fixtures assert the right flags. **This is the first "release-worth
 DEX counts + `.so` checksec correct on a real APK. Tracks can be built by two
 people/agents in parallel — they touch disjoint analysers.
 
-### M4 — Security posture & permissions
+### M4 — Security posture & permissions  ✅ done
 *Goal: the "should I worry about this?" surface.*
 
 - Android: dangerous permissions, exported components, `usesCleartextTraffic`,

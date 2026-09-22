@@ -25,6 +25,12 @@ public sealed class SecurityPostureInfo
 
     /// <summary>Dangerous permissions, for a quick count/highlight.</summary>
     public IEnumerable<PermissionInfo> DangerousPermissions => Permissions.Where(p => p.Dangerous);
+
+    /// <summary>True when any posture signal was found — used to drop an otherwise-empty category.</summary>
+    public bool HasAny =>
+        Permissions.Count > 0 || ExportedComponents.Count > 0 || UsesCleartextTraffic is not null ||
+        UsageDescriptions.Count > 0 || AtsAllowsArbitraryLoads is not null || AtsExceptionDomains.Count > 0 ||
+        UrlSchemes.Count > 0 || HasPrivacyManifest is not null || PotentialSecrets.Count > 0;
 }
 
 /// <summary>A declared permission and whether it's in the dangerous/runtime/special class.</summary>
