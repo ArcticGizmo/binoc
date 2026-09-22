@@ -119,7 +119,7 @@ Each milestone is a **shippable increment** with explicit exit criteria. M0–M2
 deliver a genuinely useful tool (the "80% cheap wins" from findings §core-insight);
 M3+ add depth.
 
-### M0 — Foundations & the empty shell
+### M0 — Foundations & the empty shell  ✅ done
 *Goal: a runnable Nord-dark window and a testable Core skeleton. No analysis yet.*
 
 - Solution + three projects (§2), CI-less local build (`run.bat`/`run.sh` like Perch).
@@ -139,7 +139,7 @@ M3+ add depth.
 **Exit:** app launches, Nord dark, drag a file in → placeholder report renders;
 format detection unit-tested for apk/aab/ipa/unknown.
 
-### M1 — Archive walk + Identity (first real report, all 3 formats)
+### M1 — Archive walk + Identity (first real report, all 3 formats)  ✅ done
 *Goal: the cheapest, most universal answers, end to end.*
 
 - **Archive/size walk** (all 3): entry list, compressed/uncompressed sizes,
