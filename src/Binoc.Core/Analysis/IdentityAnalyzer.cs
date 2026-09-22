@@ -1,5 +1,7 @@
 using System.IO.Compression;
+using System.Text.RegularExpressions;
 using Binoc.Core.Android;
+using Binoc.Core.Ios;
 using Binoc.Core.Model;
 
 namespace Binoc.Core.Analysis;
@@ -20,9 +22,69 @@ public sealed class IdentityAnalyzer : IAnalyzer
         switch (context.Format)
         {
             case BinaryFormat.Apk: AnalyzeApk(context, report); break;
-            // AAB and IPA identity land in the following M1 steps.
+            case BinaryFormat.Ipa: AnalyzeIpa(context, report); break;
+            // AAB identity lands in the following M1 step.
         }
     }
+
+    // The app bundle's own Info.plist: Payload/<Name>.app/Info.plist — not a nested framework/extension one.
+    private static readonly Regex AppInfoPlist =
+        new(@"^Payload/[^/]+\.app/Info\.plist$", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+    private static void AnalyzeIpa(AnalysisContext context, AnalysisReport report)
+    {
+        var entry = context.Archive.Entries.FirstOrDefault(e => AppInfoPlist.IsMatch(e.FullName.Replace('\\', '/')));
+        if (entry is null)
+        {
+            report.Notes.Add(new ReportNote("identity", NoteSeverity.Warning,
+                "No Payload/<App>.app/Info.plist found in the IPA."));
+            return;
+        }
+
+        var plist = PlistReader.ParseDict(ReadFully(entry));
+        if (plist.Count == 0)
+        {
+            report.Notes.Add(new ReportNote("identity", NoteSeverity.Warning,
+                "Info.plist couldn't be decoded (neither XML nor binary plist)."));
+            return;
+        }
+
+        var identity = new IdentityInfo
+        {
+            PackageId = PlistStr(plist, "CFBundleIdentifier"),
+            VersionName = PlistStr(plist, "CFBundleShortVersionString"),
+            VersionCode = PlistStr(plist, "CFBundleVersion"),
+            MinimumOsVersion = PlistStr(plist, "MinimumOSVersion"),
+            DeviceFamily = DeviceFamily(plist),
+            BuildProvenance = BuildProvenance(plist),
+        };
+        report.Identity = identity;
+    }
+
+    private static string? DeviceFamily(IReadOnlyDictionary<string, object?> plist)
+    {
+        if (plist.TryGetValue("UIDeviceFamily", out var v) && v is List<object?> list)
+        {
+            var names = list.Select(x => Convert.ToInt64(x) switch
+            {
+                1 => "iPhone/iPod", 2 => "iPad", 3 => "Apple TV", 4 => "Apple Watch", _ => "other",
+            });
+            return string.Join(", ", names.Distinct());
+        }
+        return null;
+    }
+
+    private static string? BuildProvenance(IReadOnlyDictionary<string, object?> plist)
+    {
+        var parts = new List<string>();
+        if (PlistStr(plist, "DTSDKName") is { } sdk) parts.Add(sdk);
+        if (PlistStr(plist, "DTXcode") is { } xcode) parts.Add($"Xcode {xcode}");
+        if (PlistStr(plist, "DTPlatformVersion") is { } pv) parts.Add($"platform {pv}");
+        return parts.Count > 0 ? string.Join("  ·  ", parts) : null;
+    }
+
+    private static string? PlistStr(IReadOnlyDictionary<string, object?> plist, string key)
+        => plist.TryGetValue(key, out var v) && v is not null ? Convert.ToString(v) : null;
 
     private static void AnalyzeApk(AnalysisContext context, AnalysisReport report)
     {

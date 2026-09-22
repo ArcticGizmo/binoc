@@ -1,4 +1,5 @@
 using System.IO.Compression;
+using System.Text;
 using Binoc.Core.Analysis;
 using Xunit;
 
@@ -60,6 +61,47 @@ public class IdentityAnalyzerTests
             Assert.Equal("24", report.Identity.MinSdk);
             Assert.Equal("34", report.Identity.TargetSdk);
             Assert.Equal(false, report.Identity.IsDebuggable);
+        }
+        finally { File.Delete(path); }
+    }
+
+    private static string WriteIpa(string infoPlistXml)
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"binoc-id-{Guid.NewGuid():N}.ipa");
+        using var fs = File.Create(path);
+        using var zip = new ZipArchive(fs, ZipArchiveMode.Create);
+        using (var s = zip.CreateEntry("Payload/Demo.app/Info.plist").Open()) s.Write(Encoding.UTF8.GetBytes(infoPlistXml));
+        using (var e = zip.CreateEntry("Payload/Demo.app/Demo").Open()) e.Write(new byte[] { 0xCF, 0xFA, 0xED, 0xFE });
+        return path;
+    }
+
+    [Fact]
+    public void Ipa_identity_is_extracted_from_info_plist()
+    {
+        const string xml = """
+            <?xml version="1.0" encoding="UTF-8"?>
+            <plist version="1.0"><dict>
+              <key>CFBundleIdentifier</key><string>com.example.ios</string>
+              <key>CFBundleShortVersionString</key><string>3.4</string>
+              <key>CFBundleVersion</key><string>3401</string>
+              <key>MinimumOSVersion</key><string>15.0</string>
+              <key>UIDeviceFamily</key><array><integer>1</integer><integer>2</integer></array>
+              <key>DTSDKName</key><string>iphoneos17.0</string>
+              <key>DTXcode</key><string>1500</string>
+            </dict></plist>
+            """;
+        var path = WriteIpa(xml);
+        try
+        {
+            var report = AnalysisPipeline.Analyze(path);
+
+            Assert.NotNull(report.Identity);
+            Assert.Equal("com.example.ios", report.Identity!.PackageId);
+            Assert.Equal("3.4", report.Identity.VersionName);
+            Assert.Equal("3401", report.Identity.VersionCode);
+            Assert.Equal("15.0", report.Identity.MinimumOsVersion);
+            Assert.Equal("iPhone/iPod, iPad", report.Identity.DeviceFamily);
+            Assert.Contains("iphoneos17.0", report.Identity.BuildProvenance);
         }
         finally { File.Delete(path); }
     }
