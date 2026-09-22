@@ -1,4 +1,7 @@
+using System.IO.Compression;
+using System.Text.RegularExpressions;
 using Binoc.Core.Android;
+using Binoc.Core.Ios;
 using Binoc.Core.Model;
 using Binoc.Core.Signing;
 
@@ -13,7 +16,7 @@ public sealed class SigningAnalyzer : IAnalyzer
 {
     public string Category => "signing";
 
-    public bool AppliesTo(BinaryFormat format) => format is BinaryFormat.Apk or BinaryFormat.Aab;
+    public bool AppliesTo(BinaryFormat format) => format != BinaryFormat.Unknown;
 
     public void Analyze(AnalysisContext context, AnalysisReport report)
     {
@@ -21,7 +24,47 @@ public sealed class SigningAnalyzer : IAnalyzer
         {
             case BinaryFormat.Apk: AnalyzeApk(context, report); break;
             case BinaryFormat.Aab: AnalyzeAab(context, report); break;
+            case BinaryFormat.Ipa: AnalyzeIpa(context, report); break;
         }
+    }
+
+    private static readonly Regex EmbeddedProvision =
+        new(@"^Payload/[^/]+\.app/embedded\.mobileprovision$", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+    private static readonly Regex CodeSignature =
+        new(@"^Payload/[^/]+\.app/_CodeSignature/", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+    private void AnalyzeIpa(AnalysisContext context, AnalysisReport report)
+    {
+        var signing = new SigningInfo();
+        var names = context.Archive.Entries.Select(e => e.FullName.Replace('\\', '/')).ToList();
+
+        if (names.Any(n => CodeSignature.IsMatch(n)))
+            signing.Schemes.Add("Apple code signing");
+
+        var provision = context.Archive.Entries
+            .FirstOrDefault(e => EmbeddedProvision.IsMatch(e.FullName.Replace('\\', '/')));
+        if (provision is not null && MobileProvisionReader.Read(ReadFully(provision)) is { } mp)
+        {
+            signing.Schemes.Add("embedded provisioning profile");
+            if (mp.SignerCertDer is not null)
+                signing.Certificate = CertSummary.From(mp.SignerCertDer);
+        }
+        else
+        {
+            report.Notes.Add(new ReportNote("signing", NoteSeverity.Info,
+                "No embedded provisioning profile — App Store distribution strips it, and Apple re-signs the "
+                + "app, so the shipping signing identity isn't visible here (full code-signature parsing lands in M3)."));
+        }
+
+        Finish(report, signing, noSignatureMessage: "No Apple code signature or provisioning profile found.");
+    }
+
+    private static byte[] ReadFully(ZipArchiveEntry entry)
+    {
+        using var s = entry.Open();
+        using var ms = new MemoryStream(capacity: (int)Math.Min(entry.Length, 1 << 20));
+        s.CopyTo(ms);
+        return ms.ToArray();
     }
 
     private void AnalyzeApk(AnalysisContext context, AnalysisReport report)

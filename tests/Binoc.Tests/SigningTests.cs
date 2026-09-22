@@ -116,6 +116,49 @@ public class SigningTests
         finally { File.Delete(path); }
     }
 
+    // ── IPA signing via embedded.mobileprovision (CMS → plist → DeveloperCertificates) ──
+    [Fact]
+    public void Ipa_signing_reads_the_developer_certificate_from_the_provisioning_profile()
+    {
+        using var devCert = MakeCert("CN=Apple Distribution: Test Co, O=Test Co");
+        var devDer = devCert.Export(X509ContentType.Cert);
+        var b64 = Convert.ToBase64String(devDer);
+
+        string plistXml = $"""
+            <?xml version="1.0" encoding="UTF-8"?>
+            <plist version="1.0"><dict>
+              <key>DeveloperCertificates</key>
+              <array><data>{b64}</data></array>
+            </dict></plist>
+            """;
+
+        // Wrap the plist in a CMS SignedData, as a real embedded.mobileprovision is.
+        using var signer = MakeCert("CN=Apple, O=Apple Inc.");
+        var cms = new SignedCms(new ContentInfo(System.Text.Encoding.UTF8.GetBytes(plistXml)));
+        cms.ComputeSignature(new CmsSigner(signer));
+        var provision = cms.Encode();
+
+        var path = Path.Combine(Path.GetTempPath(), $"binoc-sig-{Guid.NewGuid():N}.ipa");
+        using (var fs = File.Create(path))
+        using (var zip = new ZipArchive(fs, ZipArchiveMode.Create))
+        {
+            using (var i = zip.CreateEntry("Payload/Demo.app/Info.plist").Open())
+                i.Write(System.Text.Encoding.UTF8.GetBytes("<?xml version=\"1.0\"?><plist><dict/></plist>"));
+            using (var m = zip.CreateEntry("Payload/Demo.app/embedded.mobileprovision").Open()) m.Write(provision);
+            using (var c = zip.CreateEntry("Payload/Demo.app/_CodeSignature/CodeResources").Open()) c.Write(new byte[] { 0 });
+        }
+        try
+        {
+            var report = AnalysisPipeline.Analyze(path);
+
+            Assert.NotNull(report.Signing);
+            Assert.Contains("Apple code signing", report.Signing!.Schemes);
+            Assert.NotNull(report.Signing.Certificate);
+            Assert.Contains("Apple Distribution: Test Co", report.Signing.Certificate!.Subject);
+        }
+        finally { File.Delete(path); }
+    }
+
     // ── AAB upload-key (JAR / PKCS#7) end to end ──
     [Fact]
     public void Aab_signing_reads_upload_key_and_flags_it()

@@ -158,7 +158,7 @@ format detection unit-tested for apk/aab/ipa/unknown.
 **Exit:** drop any of the three formats → correct Identity + archive breakdown,
 with a screenshot in `./captures/`. Golden-file tests for each format's Identity.
 
-### M2 — Signing & certificates (all 3 formats)
+### M2 — Signing & certificates (all 3 formats)  ✅ done
 *Goal: "who signed this, and is it trustworthy?" — the highest-value security answer.*
 
 - APK: detect scheme set (v1 JAR / v2 / v3 / v3.1 rotation / v4); parse the v2/v3
