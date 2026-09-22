@@ -1,4 +1,7 @@
+using System.IO.Compression;
+using System.Text.RegularExpressions;
 using Binoc.Core.Android;
+using Binoc.Core.Ios;
 using Binoc.Core.Model;
 
 namespace Binoc.Core.Analysis;
@@ -26,7 +29,66 @@ public sealed class PostureAnalyzer : IAnalyzer
             case BinaryFormat.Aab:
                 AnalyzeAndroid(context, report);
                 break;
+            case BinaryFormat.Ipa:
+                AnalyzeIos(context, report);
+                break;
         }
+    }
+
+    private static readonly Regex AppInfoPlist =
+        new(@"^Payload/([^/]+\.app)/Info\.plist$", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+    private static void AnalyzeIos(AnalysisContext context, AnalysisReport report)
+    {
+        var infoEntry = context.Archive.Entries
+            .FirstOrDefault(e => AppInfoPlist.IsMatch(e.FullName.Replace('\\', '/')));
+        if (infoEntry is null) return;
+
+        var appDir = AppInfoPlist.Match(infoEntry.FullName.Replace('\\', '/')).Groups[1].Value;
+        var plist = PlistReader.ParseDict(ReadFully(infoEntry));
+
+        var posture = new SecurityPostureInfo();
+
+        // Purpose-string prompts: any key ending in UsageDescription.
+        foreach (var kv in plist)
+            if (kv.Key.EndsWith("UsageDescription", StringComparison.Ordinal))
+                posture.UsageDescriptions.Add(new UsageDescription(kv.Key, Convert.ToString(kv.Value) ?? ""));
+
+        // App Transport Security.
+        if (plist.TryGetValue("NSAppTransportSecurity", out var atsObj) && atsObj is IReadOnlyDictionary<string, object?> ats)
+        {
+            if (ats.TryGetValue("NSAllowsArbitraryLoads", out var al) && al is bool alb) posture.AtsAllowsArbitraryLoads = alb;
+            if (ats.TryGetValue("NSExceptionDomains", out var ed) && ed is IReadOnlyDictionary<string, object?> domains)
+                posture.AtsExceptionDomains.AddRange(domains.Keys);
+        }
+
+        // Custom URL schemes.
+        if (plist.TryGetValue("CFBundleURLTypes", out var urlTypesObj) && urlTypesObj is List<object?> urlTypes)
+            foreach (var t in urlTypes)
+                if (t is IReadOnlyDictionary<string, object?> td &&
+                    td.TryGetValue("CFBundleURLSchemes", out var schemes) && schemes is List<object?> schemeList)
+                    posture.UrlSchemes.AddRange(schemeList.Select(s => Convert.ToString(s) ?? "").Where(s => s.Length > 0));
+
+        // Apple privacy manifest at the app root.
+        var privacyRegex = new Regex($@"^Payload/{Regex.Escape(appDir)}/PrivacyInfo\.xcprivacy$", RegexOptions.IgnoreCase);
+        posture.HasPrivacyManifest = context.Archive.Entries.Any(e => privacyRegex.IsMatch(e.FullName.Replace('\\', '/')));
+
+        report.SecurityPosture = posture;
+
+        if (posture.AtsAllowsArbitraryLoads == true)
+            report.Notes.Add(new ReportNote("posture", NoteSeverity.Warning,
+                "NSAllowsArbitraryLoads is true — App Transport Security is disabled, so the app permits cleartext HTTP."));
+        if (posture.HasPrivacyManifest == false)
+            report.Notes.Add(new ReportNote("posture", NoteSeverity.Info,
+                "No app-level PrivacyInfo.xcprivacy — Apple's privacy manifest is absent (required for some APIs/SDKs)."));
+    }
+
+    private static byte[] ReadFully(ZipArchiveEntry entry)
+    {
+        using var s = entry.Open();
+        using var ms = new MemoryStream(capacity: (int)Math.Min(entry.Length, 1 << 20));
+        s.CopyTo(ms);
+        return ms.ToArray();
     }
 
     private static void AnalyzeAndroid(AnalysisContext context, AnalysisReport report)
