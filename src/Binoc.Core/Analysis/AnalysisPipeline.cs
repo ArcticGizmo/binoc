@@ -23,6 +23,7 @@ public static class AnalysisPipeline
         new NativeLibsAnalyzer(),
         new ProvisioningAnalyzer(),
         new MachOAnalyzer(),
+        new PostureAnalyzer(),
     };
 
     /// <summary>Analyse the file at <paramref name="path"/> and return a fully-populated report. Throws

@@ -141,6 +141,10 @@ internal sealed class MainWindow : Window
         if (report.Provisioning is { } prov)
             cards.Children.Add(BinocUi.Card(BuildProvisioning(prov)));
 
+        // Security posture card.
+        if (report.SecurityPosture is { } posture)
+            cards.Children.Add(BinocUi.Card(BuildPosture(posture)));
+
         // Code (DEX) card.
         if (report.Code is { } code)
             cards.Children.Add(BinocUi.Card(BuildCode(code)));
@@ -282,6 +286,104 @@ internal sealed class MainWindow : Window
             });
         }
         return stack;
+    }
+
+    private static Control BuildPosture(SecurityPostureInfo p)
+    {
+        var stack = new StackPanel();
+        stack.Children.Add(BinocUi.SectionTitle("Security posture"));
+
+        // Android: permissions.
+        if (p.Permissions.Count > 0)
+        {
+            int dangerous = p.DangerousPermissions.Count();
+            stack.Children.Add(new TextBlock
+            {
+                Text = $"PERMISSIONS ({p.Permissions.Count}, {dangerous} high-risk)",
+                FontSize = 11, FontWeight = FontWeight.SemiBold, Foreground = Palette.MutedBrush,
+                Margin = new Thickness(0, 0, 0, 6),
+            });
+            var chips = new WrapPanel();
+            foreach (var perm in p.Permissions.OrderByDescending(x => x.Dangerous))
+            {
+                var shortName = perm.Name.Contains('.') ? perm.Name[(perm.Name.LastIndexOf('.') + 1)..] : perm.Name;
+                chips.Children.Add(new Border
+                {
+                    Background = Palette.SunkenBrush, CornerRadius = new CornerRadius(4),
+                    Padding = new Thickness(7, 2), Margin = new Thickness(0, 0, 6, 4),
+                    Child = new TextBlock
+                    {
+                        Text = shortName, FontSize = 11,
+                        Foreground = perm.Dangerous ? Palette.ErrorBrush : Palette.MutedBrush,
+                    },
+                });
+            }
+            stack.Children.Add(chips);
+        }
+
+        if (p.ExportedComponents.Count > 0)
+        {
+            stack.Children.Add(PostureLabel($"EXPORTED COMPONENTS ({p.ExportedComponents.Count})"));
+            foreach (var c in p.ExportedComponents)
+                stack.Children.Add(new TextBlock
+                {
+                    Text = $"{c.Type}: {c.Name}", FontSize = 12, Foreground = Palette.FgBrush, TextWrapping = TextWrapping.Wrap,
+                });
+        }
+
+        if (p.UsesCleartextTraffic is { } ct)
+            stack.Children.Add(PostureLine("Cleartext traffic", ct ? "allowed (HTTP permitted)" : "not allowed",
+                ct ? Palette.WarnBrush : Palette.OkBrush));
+
+        // iOS: ATS, URL schemes, usage descriptions, privacy manifest.
+        if (p.AtsAllowsArbitraryLoads is { } ats)
+            stack.Children.Add(PostureLine("App Transport Security",
+                ats ? "arbitrary loads allowed (HTTP permitted)" : "enforced", ats ? Palette.WarnBrush : Palette.OkBrush));
+        if (p.AtsExceptionDomains.Count > 0)
+            stack.Children.Add(PostureLine("ATS exception domains", string.Join(", ", p.AtsExceptionDomains), Palette.WarnBrush));
+        if (p.HasPrivacyManifest is { } pm)
+            stack.Children.Add(PostureLine("Privacy manifest", pm ? "present" : "absent",
+                pm ? Palette.OkBrush : Palette.MutedBrush));
+        if (p.UrlSchemes.Count > 0)
+            stack.Children.Add(PostureLine("URL schemes", string.Join(", ", p.UrlSchemes), Palette.FgBrush));
+        if (p.UsageDescriptions.Count > 0)
+        {
+            stack.Children.Add(PostureLabel($"PRIVACY PROMPTS ({p.UsageDescriptions.Count})"));
+            foreach (var u in p.UsageDescriptions)
+                stack.Children.Add(new TextBlock
+                {
+                    Text = $"{u.Key.Replace("UsageDescription", "")}: {u.Purpose}",
+                    FontSize = 12, Foreground = Palette.MutedBrush, TextWrapping = TextWrapping.Wrap,
+                    Margin = new Thickness(0, 0, 0, 2),
+                });
+        }
+
+        // Cross-format: potential secrets (kind + location only, never the value).
+        if (p.PotentialSecrets.Count > 0)
+        {
+            stack.Children.Add(PostureLabel($"POTENTIAL SECRETS ({p.PotentialSecrets.Count}) — heuristic"));
+            foreach (var s in p.PotentialSecrets)
+                stack.Children.Add(new TextBlock
+                {
+                    Text = $"{s.Kind} in {s.File}", FontSize = 12, Foreground = Palette.WarnBrush, TextWrapping = TextWrapping.Wrap,
+                });
+        }
+
+        return stack;
+    }
+
+    private static TextBlock PostureLabel(string text) => new()
+    {
+        Text = text, FontSize = 11, FontWeight = FontWeight.SemiBold, Foreground = Palette.MutedBrush,
+        Margin = new Thickness(0, 12, 0, 6),
+    };
+
+    private static Control PostureLine(string label, string value, IBrush valueBrush)
+    {
+        var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Margin = new Thickness(0, 8, 0, 0) };
+        row.Children.Add(new TextBlock { Text = label, FontSize = 12, FontWeight = FontWeight.SemiBold, Foreground = Palette.MutedBrush, VerticalAlignment = VerticalAlignment.Center });
+        row.Children.Add(new TextBlock { Text = value, FontSize = 12, Foreground = valueBrush, TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center });
+        return row;
     }
 
     private static Control BuildProvisioning(ProvisioningInfo p)

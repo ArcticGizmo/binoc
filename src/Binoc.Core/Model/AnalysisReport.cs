@@ -47,6 +47,9 @@ public sealed class AnalysisReport
     /// <summary>Mach-O executable — archs, PIE, FairPlay encryption, code signature (iOS only). (M3)</summary>
     public MachOInfo? MachO { get; set; }
 
+    /// <summary>Permissions, exported components, cleartext/ATS, secrets, privacy manifest. (M4)</summary>
+    public SecurityPostureInfo? SecurityPosture { get; set; }
+
     // Later milestones add: Provisioning (iOS), Code, Obfuscation, SizeBreakdown, NativeLibs,
     // SecurityPosture — each as its own nullable category object, following the same shape.
 
