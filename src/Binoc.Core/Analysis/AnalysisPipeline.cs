@@ -21,6 +21,7 @@ public static class AnalysisPipeline
         new SigningAnalyzer(),
         new CodeAnalyzer(),
         new NativeLibsAnalyzer(),
+        new ProvisioningAnalyzer(),
     };
 
     /// <summary>Analyse the file at <paramref name="path"/> and return a fully-populated report. Throws

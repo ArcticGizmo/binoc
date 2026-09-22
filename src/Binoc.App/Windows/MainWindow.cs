@@ -137,6 +137,10 @@ internal sealed class MainWindow : Window
         if (report.Signing is { } signing)
             cards.Children.Add(BinocUi.Card(BuildSigning(signing)));
 
+        // Provisioning card (iOS).
+        if (report.Provisioning is { } prov)
+            cards.Children.Add(BinocUi.Card(BuildProvisioning(prov)));
+
         // Code (DEX) card.
         if (report.Code is { } code)
             cards.Children.Add(BinocUi.Card(BuildCode(code)));
@@ -273,6 +277,38 @@ internal sealed class MainWindow : Window
                 FontSize = 12, Foreground = Palette.WarnBrush, TextWrapping = TextWrapping.Wrap,
             });
         }
+        return stack;
+    }
+
+    private static Control BuildProvisioning(ProvisioningInfo p)
+    {
+        var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*"), RowSpacing = 8, ColumnSpacing = 16 };
+        void Row(string label, string? value, IBrush? brush = null)
+        {
+            if (string.IsNullOrEmpty(value)) return;
+            int r = grid.RowDefinitions.Count;
+            grid.RowDefinitions.Add(new RowDefinition(GridLength.Auto));
+            var l = BinocUi.FieldLabel(label); l.VerticalAlignment = VerticalAlignment.Center;
+            var v = BinocUi.ValueText(value); if (brush is not null) v.Foreground = brush;
+            Grid.SetRow(l, r); Grid.SetColumn(l, 0);
+            Grid.SetRow(v, r); Grid.SetColumn(v, 1);
+            grid.Children.Add(l); grid.Children.Add(v);
+        }
+
+        Row("TYPE", p.DistributionType, Palette.AccentBrush);
+        Row("PROFILE", p.Name);
+        Row("TEAM", p.TeamName is { } t && p.TeamId is { } id ? $"{t} ({id})" : p.TeamName ?? p.TeamId);
+        Row("APP ID", p.AppId);
+        if (p.GetTaskAllow is { } gta) Row("GET-TASK-ALLOW", gta ? "true (debuggable)" : "false",
+            gta ? Palette.WarnBrush : Palette.OkBrush);
+        if (p.ProvisionedDeviceCount > 0) Row("DEVICES", $"{p.ProvisionedDeviceCount:N0} provisioned");
+        if (p.ExpirationDate is { } exp)
+            Row("EXPIRES", exp.ToString("yyyy-MM-dd"), exp < DateTimeOffset.UtcNow ? Palette.ErrorBrush : Palette.FgBrush);
+        if (p.Entitlements.Count > 0) Row("ENTITLEMENTS", string.Join(", ", p.Entitlements));
+
+        var stack = new StackPanel();
+        stack.Children.Add(BinocUi.SectionTitle("Provisioning"));
+        stack.Children.Add(grid);
         return stack;
     }
 

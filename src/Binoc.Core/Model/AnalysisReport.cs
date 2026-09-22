@@ -41,6 +41,9 @@ public sealed class AnalysisReport
     /// <summary>Native ELF libraries with ABIs and checksec (Android APK/AAB). (M3)</summary>
     public NativeLibsInfo? NativeLibs { get; set; }
 
+    /// <summary>Embedded provisioning profile — distribution type, team, entitlements (iOS only). (M3)</summary>
+    public ProvisioningInfo? Provisioning { get; set; }
+
     // Later milestones add: Provisioning (iOS), Code, Obfuscation, SizeBreakdown, NativeLibs,
     // SecurityPosture — each as its own nullable category object, following the same shape.
 
