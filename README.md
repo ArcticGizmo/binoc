@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-<strong>A close look at any app binary — without the toolchain</strong>
+<strong>A close look android/apple app binaries - without the toolchain</strong>
 </p>
 
 <br>
@@ -32,13 +32,6 @@ everything itself in managed .NET.
   static analysis of the DEX will be incomplete), not a hand-wavy confidence score.
 - **Inspect iOS posture.** Provisioning type, entitlements, embedded profile details, Mach-O architectures,
   FairPlay encryption, hardening flags, and privacy strings.
-
-## Status
-
-Early — under active milestone development. See **[the implementation plan](docs/implementation-plan.md)**
-for what's built and what's next, and **[the founding research](docs/apk-aab-ipa-findings.md)** for the
-category model and the format-specific findings the app is built on. Packaging and one-line install land in
-a later milestone.
 
 ---
 
