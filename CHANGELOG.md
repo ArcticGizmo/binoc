@@ -7,7 +7,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
-- "Check for updates" in the footer — turns into an orange "Update" button when a newer version is waiting
+---
+
+## [v0.1.1] - 2026-09-23
+
+- One-line PowerShell install, checksum-verified before it runs
+- In-app changelog: a "What's new" popup after an update, plus the full history from the footer
+- "Check for updates" in the footer — turns orange when a new version is waiting, click to install
 
 ---
 

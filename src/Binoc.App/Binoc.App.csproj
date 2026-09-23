@@ -9,7 +9,7 @@
     <RootNamespace>Binoc.App</RootNamespace>
     <AssemblyName>binoc</AssemblyName>
     <Product>binoc</Product>
-    <Version>0.1.0</Version>
+    <Version>0.1.1</Version>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <!-- The .exe icon (Explorer, taskbar pin). Regenerate from binoc.svg with tools/gen-icons.ps1. -->
     <ApplicationIcon>Assets\binoc.ico</ApplicationIcon>
