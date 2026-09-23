@@ -190,6 +190,26 @@ internal sealed class MainWindow : Window
                 Text = meta, FontSize = 11, Foreground = Palette.MutedBrush, TextTrimming = TextTrimming.CharacterEllipsis,
             };
 
+            // Delete (✕) removes the entry from history; its Click is handled before the row's tap, so it
+            // doesn't also re-open the file.
+            var delPath = e.FilePath;
+            var del = new Button
+            {
+                Content = "✕", FontSize = 12, Foreground = Palette.MutedBrush, Background = Brushes.Transparent,
+                BorderThickness = new Thickness(0), Padding = new Thickness(6, 2), CornerRadius = new CornerRadius(4),
+                VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = HorizontalAlignment.Right,
+                Cursor = new Avalonia.Input.Cursor(StandardCursorType.Hand),
+            };
+            ToolTip.SetTip(del, "Remove from recent");
+            del.Click += (_, _) => { _history.Remove(delPath); RefreshSidebar(); };
+
+            var rowGrid = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto") };
+            var textStack = new StackPanel { Children = { line1, line2 }, VerticalAlignment = VerticalAlignment.Center };
+            Grid.SetColumn(textStack, 0);
+            Grid.SetColumn(del, 1);
+            rowGrid.Children.Add(textStack);
+            rowGrid.Children.Add(del);
+
             var item = new Border
             {
                 Background = active ? Palette.ButtonBgBrush : Palette.SunkenBrush,
@@ -198,7 +218,7 @@ internal sealed class MainWindow : Window
                 BorderThickness = new Thickness(1),
                 CornerRadius = new CornerRadius(6), Padding = new Thickness(10, 7), Margin = new Thickness(0, 0, 0, 6),
                 Cursor = new Avalonia.Input.Cursor(exists ? StandardCursorType.Hand : StandardCursorType.No),
-                Child = new StackPanel { Children = { line1, line2 } },
+                Child = rowGrid,
                 Opacity = exists ? 1.0 : 0.55,
             };
             if (exists)
@@ -578,6 +598,21 @@ internal sealed class MainWindow : Window
         return row;
     }
 
+    // A posture line for an enabled/disabled/unknown flag.
+    private static Control FlagLine(string label, bool? on) => PostureLine(label,
+        on switch { true => "enabled", false => "disabled", _ => "unknown" },
+        on == true ? Palette.OkBrush : Palette.MutedBrush);
+
+    // A metric line: label + whole-number percentage, coloured against Play's 25% floor.
+    private static Control MetricLine(string label, int percent)
+    {
+        var brush = percent >= 60 ? Palette.OkBrush : percent >= 25 ? Palette.WarnBrush : Palette.ErrorBrush;
+        var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Margin = new Thickness(0, 6, 0, 0) };
+        row.Children.Add(new TextBlock { Text = label, FontSize = 12, FontWeight = FontWeight.SemiBold, Foreground = Palette.MutedBrush, VerticalAlignment = VerticalAlignment.Center, MinWidth = 110 });
+        row.Children.Add(new TextBlock { Text = $"{percent}%", FontSize = 15, FontWeight = FontWeight.SemiBold, Foreground = brush, VerticalAlignment = VerticalAlignment.Center });
+        return row;
+    }
+
     private static Control BuildProvisioning(ProvisioningInfo p)
     {
         var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*"), RowSpacing = 8, ColumnSpacing = 16 };
@@ -639,65 +674,79 @@ internal sealed class MainWindow : Window
     private static Control BuildObfuscation(ObfuscationInfo o)
     {
         var stack = new StackPanel();
-        stack.Children.Add(BinocUi.SectionTitle("Obfuscation & packing"));
+        stack.Children.Add(BinocUi.SectionTitle("Optimisation & obfuscation"));
 
-        // Headline: assessment + confidence, coloured by how transformed the code is.
-        var (label, brush) = o.Assessment switch
+        // The three Play metrics — read verbatim from r8.json, or a clear "missing" state (never guessed).
+        if (o.HasMetrics)
         {
-            ObfuscationAssessment.Packed => ("Packed / protected", Palette.ErrorBrush),
-            ObfuscationAssessment.Likely => ("Likely obfuscated", Palette.WarnBrush),
-            ObfuscationAssessment.Possible => ("Possibly obfuscated", Palette.WarnBrush),
-            _ => ("No obfuscation detected", Palette.OkBrush),
-        };
-
-        var headline = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 10, Margin = new Thickness(0, 0, 0, 4) };
-        headline.Children.Add(new TextBlock { Text = label, FontSize = 15, FontWeight = FontWeight.SemiBold, Foreground = brush, VerticalAlignment = VerticalAlignment.Center });
-        headline.Children.Add(new TextBlock { Text = $"confidence {o.Confidence:P0}", FontSize = 12, Foreground = Palette.MutedBrush, VerticalAlignment = VerticalAlignment.Center });
-        stack.Children.Add(headline);
-
-        if (o.MangledNameRatio is { } ratio)
-        {
-            stack.Children.Add(PostureLine("Obfuscation", $"{ratio:P0}", Palette.FgBrush));
+            if (o.ObfuscationPercent is { } obf) stack.Children.Add(MetricLine("Obfuscation", obf));
+            if (o.OptimizationPercent is { } opt) stack.Children.Add(MetricLine("Optimisation", opt));
+            if (o.ShrinkingPercent is { } shr) stack.Children.Add(MetricLine("Shrinking", shr));
             stack.Children.Add(new TextBlock
             {
-                Text = $"{ratio:P0} of {o.SymbolsSampled:N0} defined symbols (classes, methods, fields) use short "
-                    + "machine names — binoc's obfuscation estimate; comparable to Play Console's figure.",
-                FontSize = 12, Foreground = Palette.MutedBrush, TextWrapping = TextWrapping.Wrap,
+                Text = "Read from r8.json — the exact figures Google Play reports (Play enforces a 25% floor from Feb 2027 "
+                    + "for apps with non-negligible DEX).",
+                FontSize = 11, Foreground = Palette.MutedBrush, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 4, 0, 2),
+            });
+        }
+        else
+        {
+            stack.Children.Add(new TextBlock
+            {
+                Text = "No r8.json in this file — not enough information to report optimisation / obfuscation / shrinking. "
+                    + "R8 embeds it only in AABs built with AGP 8.10+ / recent R8 (APKs never carry it). binoc doesn't "
+                    + "estimate these; analyse the .aab, and make sure R8 is on (minifyEnabled true).",
+                FontSize = 12, Foreground = Palette.WarnBrush, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 4),
             });
         }
 
-        if (o.RepackagedClasses == true)
-            stack.Children.Add(PostureLine("Repackage classes", "on (classes collapsed into one package)", Palette.WarnBrush));
+        // R8 config, when r8.json is present.
+        if (o.HasR8Metadata)
+        {
+            stack.Children.Add(PostureLabel("R8 CONFIG"));
+            stack.Children.Add(PostureLine("R8 version", o.R8Version ?? "unknown", Palette.FgBrush));
+            stack.Children.Add(FlagLine("Optimisations (full mode)", o.R8OptimizationsEnabled));
+            stack.Children.Add(FlagLine("Repackage classes", o.R8RepackageClassesEnabled));
+            stack.Children.Add(FlagLine("Optimised resource shrinking", o.R8OptimizedResourceShrinkingEnabled));
+        }
 
         if (o.HasEmbeddedDeobfuscationMap is { } hasMap)
             stack.Children.Add(PostureLine("Deobfuscation map",
                 hasMap ? "embedded in bundle (Play uses it to de-obfuscate crashes)" : "not embedded",
                 hasMap ? Palette.OkBrush : Palette.MutedBrush));
 
-        // Evidence: one line per signal.
+        // Packer / protector — concrete signature matches, not a score.
         if (o.Signals.Count > 0)
         {
-            stack.Children.Add(PostureLabel("SIGNALS"));
+            stack.Children.Add(PostureLabel("PACKER / PROTECTOR"));
             foreach (var s in o.Signals)
-            {
-                var sBrush = s.Kind == SignalKind.Packer ? Palette.ErrorBrush
-                    : s.Kind == SignalKind.NameMangling ? Palette.WarnBrush : Palette.MutedBrush;
                 stack.Children.Add(new TextBlock
                 {
-                    Text = $"• {s.Name} — {s.Detail}", FontSize = 12, Foreground = sBrush, TextWrapping = TextWrapping.Wrap,
-                    Margin = new Thickness(0, 0, 0, 2),
+                    Text = $"• {s.Name} — {s.Detail}", FontSize = 12, Foreground = Palette.ErrorBrush,
+                    TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 2),
                 });
-            }
         }
 
-        stack.Children.Add(new TextBlock
+        // Raw r8.json, collapsed by default — the exact metadata Play reads, copyable.
+        if (o.R8MetadataRaw is { Length: > 0 } raw)
         {
-            Text = "Heuristic — a hedged assessment from signals, not a definitive verdict. Optimisation % and code/resource "
-                + "shrinking % aren't shown: Play Console computes those against the pre-shrink build, which isn't "
-                + "present in a finished APK/AAB.",
-            FontSize = 11, Foreground = Palette.MutedBrush, FontStyle = FontStyle.Italic,
-            TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 8, 0, 0),
-        });
+            var json = BinocUi.SelectableText(raw);
+            json.FontFamily = new FontFamily("Consolas, Menlo, monospace");
+            json.FontSize = 12;
+            stack.Children.Add(new Expander
+            {
+                Header = "View r8.json",
+                Foreground = Palette.FgBrush,
+                Margin = new Thickness(0, 10, 0, 0),
+                Content = new ScrollViewer
+                {
+                    MaxHeight = 320, Content = json,
+                    HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
+                    VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+                },
+            });
+        }
+
         return stack;
     }
 

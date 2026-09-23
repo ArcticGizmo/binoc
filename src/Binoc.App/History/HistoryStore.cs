@@ -76,6 +76,15 @@ public sealed class HistoryStore
         return entries;
     }
 
+    /// <summary>Removes the entry for a path (if present) and persists. Never throws.</summary>
+    public List<HistoryEntry> Remove(string filePath)
+    {
+        var entries = Load();
+        entries.RemoveAll(e => string.Equals(e.FilePath, filePath, System.StringComparison.OrdinalIgnoreCase));
+        Save(entries);
+        return entries;
+    }
+
     private void Save(List<HistoryEntry> entries)
     {
         try

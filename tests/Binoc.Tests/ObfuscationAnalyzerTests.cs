@@ -1,4 +1,5 @@
 using System.IO.Compression;
+using System.Text;
 using Binoc.Core.Analysis;
 using Binoc.Core.Model;
 using Xunit;
@@ -13,106 +14,91 @@ public class ObfuscationAnalyzerTests
         using var fs = File.Create(path);
         using var zip = new ZipArchive(fs, ZipArchiveMode.Create);
         using (var m = zip.CreateEntry("AndroidManifest.xml").Open()) m.Write(new byte[] { 0 });
+        using (var d = zip.CreateEntry("classes.dex").Open()) d.Write(new byte[] { 1 });
         foreach (var (name, data) in entries)
             using (var s = zip.CreateEntry(name).Open()) s.Write(data);
         return path;
     }
 
-    // A DEX with `mangled` single-char classes and `readable` normally-named classes.
-    private static byte[] Dex(int mangled, int readable)
+    private static string WriteAab(params (string name, byte[] data)[] entries)
     {
-        var descriptors = new List<string>();
-        for (int i = 0; i < mangled; i++) descriptors.Add($"Lcom/x/{(char)('a' + i % 26)}{(i >= 26 ? ((char)('a' + i / 26)).ToString() : "")};");
-        for (int i = 0; i < readable; i++) descriptors.Add($"Lcom/example/Screen{i};");
-        return DexTestBuilder.Build(descriptors.ToArray());
-    }
-
-    [Fact]
-    public void Flags_likely_obfuscation_from_mangled_names()
-    {
-        var path = WriteApk(("classes.dex", Dex(mangled: 26, readable: 4)));
-        try
-        {
-            var report = AnalysisPipeline.Analyze(path);
-
-            Assert.NotNull(report.Obfuscation);
-            var o = report.Obfuscation!;
-            Assert.Equal(ObfuscationAssessment.Likely, o.Assessment);
-            Assert.False(o.PackerDetected);
-            Assert.NotNull(o.MangledNameRatio);
-            Assert.True(o.MangledNameRatio > 0.6, $"ratio was {o.MangledNameRatio}");
-            Assert.Contains(o.Signals, s => s.Kind == SignalKind.NameMangling);
-        }
-        finally { File.Delete(path); }
+        var path = Path.Combine(Path.GetTempPath(), $"binoc-obf-{Guid.NewGuid():N}.aab");
+        using var fs = File.Create(path);
+        using var zip = new ZipArchive(fs, ZipArchiveMode.Create);
+        using (var b = zip.CreateEntry("BundleConfig.pb").Open()) b.Write(new byte[] { 0 });     // detects as AAB
+        using (var m = zip.CreateEntry("base/manifest/AndroidManifest.xml").Open()) m.Write(new byte[] { 0 });
+        using (var d = zip.CreateEntry("base/dex/classes.dex").Open()) d.Write(new byte[] { 1 });
+        foreach (var (name, data) in entries)
+            using (var s = zip.CreateEntry(name).Open()) s.Write(data);
+        return path;
     }
 
     [Fact]
     public void Detects_commercial_packer()
     {
-        var path = WriteApk(
-            ("classes.dex", Dex(mangled: 1, readable: 1)),
-            ("lib/arm64-v8a/libjiagu.so", new byte[] { 1, 2, 3 }));
+        var path = WriteApk(("lib/arm64-v8a/libjiagu.so", new byte[] { 1, 2, 3 }));
         try
         {
             var report = AnalysisPipeline.Analyze(path);
-
             Assert.NotNull(report.Obfuscation);
-            var o = report.Obfuscation!;
-            Assert.Equal(ObfuscationAssessment.Packed, o.Assessment);
-            Assert.True(o.PackerDetected);
-            Assert.True(o.Confidence >= 0.9);
-            Assert.Contains(o.Signals, s => s.Kind == SignalKind.Packer && s.Name.Contains("360 Jiagu"));
+            Assert.True(report.Obfuscation!.PackerDetected);
+            Assert.Contains(report.Obfuscation.Signals, s => s.Name.Contains("360 Jiagu"));
             Assert.Contains(report.Notes, n => n.Category == "obfuscation" && n.Severity == NoteSeverity.Warning);
         }
         finally { File.Delete(path); }
     }
 
     [Fact]
-    public void Reports_no_obfuscation_for_readable_names()
+    public void Reads_real_percentages_from_r8_json()
     {
-        var path = WriteApk(("classes.dex", Dex(mangled: 0, readable: 30)));
+        var r8 = """
+        {
+          "version": "9.0.32",
+          "isOptimizationsEnabled": true,
+          "isRepackageClassesEnabled": true,
+          "resourceOptimization": { "isOptimizedShrinkingEnabled": true },
+          "stats": {
+            "noObfuscationPercentage": 12.4,
+            "noOptimizationPercentage": 40,
+            "noShrinkingPercentage": 30.6
+          }
+        }
+        """;
+        var path = WriteAab(("BUNDLE-METADATA/com.android.tools/r8.json", Encoding.UTF8.GetBytes(r8)));
         try
         {
             var report = AnalysisPipeline.Analyze(path);
-
-            Assert.NotNull(report.Obfuscation);
             var o = report.Obfuscation!;
-            Assert.Equal(ObfuscationAssessment.None, o.Assessment);
-            Assert.False(o.PackerDetected);
-            Assert.Equal(0.0, o.MangledNameRatio);
+
+            Assert.True(o.HasR8Metadata);
+            Assert.True(o.HasMetrics);
+            Assert.Equal(88, o.ObfuscationPercent);   // 100 - 12.4 -> 87.6 -> 88
+            Assert.Equal(60, o.OptimizationPercent);  // 100 - 40
+            Assert.Equal(69, o.ShrinkingPercent);     // 100 - 30.6 -> 69.4 -> 69
+            Assert.Equal("9.0.32", o.R8Version);
+            Assert.True(o.R8OptimizationsEnabled);
+            Assert.True(o.R8RepackageClassesEnabled);
+            Assert.True(o.R8OptimizedResourceShrinkingEnabled);
+            Assert.False(string.IsNullOrEmpty(o.R8MetadataRaw));
         }
         finally { File.Delete(path); }
     }
 
     [Fact]
-    public void Detects_repackaged_classes()
+    public void Reports_missing_r8_json_without_guessing()
     {
-        // 30 single-char classes all in the root package → repackageclasses fingerprint.
-        var descriptors = new List<string>();
-        for (int i = 0; i < 30; i++)
-            descriptors.Add($"L{(char)('a' + i % 26)}{(i >= 26 ? ((char)('a' + i / 26)).ToString() : "")};");
-        var path = WriteApk(("classes.dex", DexTestBuilder.Build(descriptors.ToArray())));
+        var path = WriteApk(); // APKs never carry r8.json
         try
         {
             var report = AnalysisPipeline.Analyze(path);
             var o = report.Obfuscation!;
-            Assert.True(o.RepackagedClasses);
-            Assert.Contains(o.Signals, s => s.Name == "Repackaged classes");
-        }
-        finally { File.Delete(path); }
-    }
 
-    [Fact]
-    public void Small_class_set_is_capped_below_likely()
-    {
-        // 5 mangled of 5 → ratio 1.0, but too small a sample to call "Likely".
-        var path = WriteApk(("classes.dex", Dex(mangled: 5, readable: 0)));
-        try
-        {
-            var report = AnalysisPipeline.Analyze(path);
-            var o = report.Obfuscation!;
-            Assert.Equal(ObfuscationAssessment.Possible, o.Assessment);
-            Assert.True(o.Confidence <= 0.5);
+            Assert.False(o.HasR8Metadata);
+            Assert.False(o.HasMetrics);
+            Assert.Null(o.ObfuscationPercent);
+            Assert.Null(o.OptimizationPercent);
+            Assert.Null(o.ShrinkingPercent);
+            Assert.Contains(report.Notes, n => n.Category == "obfuscation" && n.Message.Contains("r8.json"));
         }
         finally { File.Delete(path); }
     }

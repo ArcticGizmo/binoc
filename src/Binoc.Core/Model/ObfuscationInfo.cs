@@ -1,73 +1,71 @@
 namespace Binoc.Core.Model;
 
 /// <summary>
-/// Obfuscation / packing (findings §Obfuscation, decision D2/D4): a deliberately <em>hedged</em> read of
-/// whether the app's code has been renamed (R8/ProGuard/DexGuard) or wrapped by a commercial packer/protector
-/// (360 Jiagu, Bangcle, Tencent Legu, …). This is never a bare yes/no — it carries a confidence score and the
-/// individual signals that produced it, so a reader can judge the evidence themselves.
+/// Obfuscation / optimisation (findings §Obfuscation). binoc reports only <em>facts</em> here, no guessed
+/// numbers: the optimisation / obfuscation / shrinking percentages come straight from R8's own
+/// <c>BUNDLE-METADATA/com.android.tools/r8.json</c> (the same source Google Play uses), and packer/protector
+/// detection comes from concrete on-disk signatures. When an APK/AAB carries no <c>r8.json</c>, the metrics are
+/// simply reported as missing — binoc does not invent a substitute.
 /// </summary>
 public sealed class ObfuscationInfo
 {
-    /// <summary>The headline verdict, coarsened from <see cref="Confidence"/> and the signal set.</summary>
-    public ObfuscationAssessment Assessment { get; set; }
+    // ── Play metrics, read verbatim from r8.json (whole %, positive form). Null when r8.json is absent. ──
 
-    /// <summary>Confidence that the app is obfuscated/packed, 0.0–1.0. Never presented as certainty.</summary>
-    public double Confidence { get; set; }
+    /// <summary>Obfuscation percentage from r8.json (100 − noObfuscationPercentage).</summary>
+    public int? ObfuscationPercent { get; set; }
 
-    /// <summary>The evidence — each signal that fired, with a human-readable detail and its weight.</summary>
-    public List<ObfuscationSignal> Signals { get; } = new();
+    /// <summary>Optimisation percentage from r8.json (100 − noOptimizationPercentage).</summary>
+    public int? OptimizationPercent { get; set; }
 
-    /// <summary>Fraction of the app's own defined <em>symbols</em> (classes + declared methods + fields) whose
-    /// name looks machine-renamed (e.g. <c>a</c>, <c>b</c>, <c>ab</c>) — binoc's obfuscation percentage. Null when
-    /// the DEX couldn't be read deeply. Framework references are excluded, so this tracks the app's own code.</summary>
-    public double? MangledNameRatio { get; set; }
+    /// <summary>Shrinking percentage from r8.json (100 − noShrinkingPercentage).</summary>
+    public int? ShrinkingPercent { get; set; }
 
-    /// <summary>How many defined symbols the ratio was computed over (0 when not computed).</summary>
-    public int SymbolsSampled { get; set; }
+    // ── R8 build metadata (BUNDLE-METADATA/com.android.tools/r8.json). AAB only. ──
 
-    /// <summary>How many defined classes were seen (subset of <see cref="SymbolsSampled"/>).</summary>
-    public int ClassesSampled { get; set; }
+    /// <summary>True when the AAB carries R8's <c>r8.json</c> build metadata (the source of the metrics above).</summary>
+    public bool HasR8Metadata { get; set; }
 
-    /// <summary>True when almost all classes were collapsed into a single short package — the fingerprint of
-    /// R8's <c>-repackageclasses</c> (aggressive/"full mode" shrinking). Null when not determinable.</summary>
-    public bool? RepackagedClasses { get; set; }
+    /// <summary>R8 compiler version from r8.json (Play only scores bundles built with a recent-enough R8).</summary>
+    public string? R8Version { get; set; }
+
+    /// <summary>Whether R8 optimisations ran (roughly "full mode" optimisation), from r8.json.</summary>
+    public bool? R8OptimizationsEnabled { get; set; }
+
+    /// <summary>Whether R8 repackaged classes into one package, from r8.json.</summary>
+    public bool? R8RepackageClassesEnabled { get; set; }
+
+    /// <summary>Whether R8's optimised resource shrinking ran, from r8.json.</summary>
+    public bool? R8OptimizedResourceShrinkingEnabled { get; set; }
+
+    /// <summary>The raw r8.json content (pretty-printed) for display in the report, when present. Null otherwise.</summary>
+    public string? R8MetadataRaw { get; set; }
 
     /// <summary>True when an R8 deobfuscation map is embedded in the bundle
-    /// (<c>BUNDLE-METADATA/com.android.tools.build.obfuscation/proguard.map</c>) — this is what Play extracts on
-    /// upload to de-obfuscate crash stack traces, without a separate mapping upload. AAB only; null if unknown.</summary>
+    /// (<c>BUNDLE-METADATA/com.android.tools.build.obfuscation/proguard.map</c>) — what Play extracts on upload to
+    /// de-obfuscate crash stack traces. AAB only; null if unknown.</summary>
     public bool? HasEmbeddedDeobfuscationMap { get; set; }
 
-    /// <summary>True when a commercial packer/protector signature matched — the strongest single signal.</summary>
+    // ── Commercial packer/protector detection (concrete signatures, not a heuristic score). ──
+
+    /// <summary>Packer/protector signatures that matched (empty when none).</summary>
+    public List<ObfuscationSignal> Signals { get; } = new();
+
+    /// <summary>True when a commercial packer/protector signature matched.</summary>
     public bool PackerDetected => Signals.Any(s => s.Kind == SignalKind.Packer);
+
+    /// <summary>True when R8's metrics are available (r8.json present and parsed).</summary>
+    public bool HasMetrics => ObfuscationPercent is not null || OptimizationPercent is not null || ShrinkingPercent is not null;
 }
 
-/// <summary>The coarse obfuscation verdict, ordered least-to-most transformed.</summary>
-public enum ObfuscationAssessment
-{
-    /// <summary>No meaningful obfuscation signals — names look like readable source.</summary>
-    None,
-    /// <summary>A minority of names are mangled, or only weak signals fired.</summary>
-    Possible,
-    /// <summary>Most of the app's classes are renamed — consistent with a normal R8/ProGuard release.</summary>
-    Likely,
-    /// <summary>A commercial packer/protector wraps the code (DEX encryption/anti-tamper).</summary>
-    Packed,
-}
-
-/// <summary>What sort of tool a signal points at, driving how heavily it weighs on the verdict.</summary>
+/// <summary>What sort of tool a signal points at.</summary>
 public enum SignalKind
 {
-    /// <summary>Name mangling — consistent with R8/ProGuard/DexGuard.</summary>
-    NameMangling,
     /// <summary>A commercial packer/protector (encrypts/wraps the real DEX).</summary>
     Packer,
-    /// <summary>A weaker corroborating hint (e.g. a stripped/absent debug marker).</summary>
-    Hint,
 }
 
-/// <summary>One obfuscation signal: what fired, a human-readable detail, and how much to trust it.</summary>
-/// <param name="Name">Short signal name (e.g. "Renamed classes", "Packer: 360 Jiagu").</param>
+/// <summary>One detection signal: what matched, a human-readable detail, and its kind.</summary>
+/// <param name="Name">Short signal name (e.g. "Packer: 360 Jiagu").</param>
 /// <param name="Detail">Human-readable evidence.</param>
 /// <param name="Kind">The class of tool this points at.</param>
-/// <param name="Weight">Relative contribution to confidence, 0.0–1.0.</param>
-public sealed record ObfuscationSignal(string Name, string Detail, SignalKind Kind, double Weight);
+public sealed record ObfuscationSignal(string Name, string Detail, SignalKind Kind);
