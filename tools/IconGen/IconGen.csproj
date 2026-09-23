@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    Rasterises the project's single source-of-truth logo (binoc.svg) into the icon assets the app
+    needs. Run with `dotnet run` here (or tools/gen-icons.ps1).
+
+    Kept out of binoc.slnx on purpose: only the generated assets are committed, so nothing in the
+    shipping app depends on the SVG renderer — which keeps decision D1 (BCL-only, no shelling out)
+    intact for Binoc.Core/App.
+
+    Renders with Svg.Skia (SkiaSharp). Skia's anti-aliasing is markedly crisper than GDI+/System.Drawing
+    at small icon sizes (where binoc's thin concentric lens rings otherwise turn muddy), and it isn't
+    Windows-only. Adapted from emuwren's IconGen, which used Svg + System.Drawing.
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>Binoc.IconGen</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Svg.Skia" Version="2.0.0.4" />
+  </ItemGroup>
+</Project>

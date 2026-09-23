@@ -11,8 +11,15 @@
     <Product>binoc</Product>
     <Version>0.1.0</Version>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <!-- The .exe icon (Explorer, taskbar pin). Regenerate from binoc.svg with tools/gen-icons.ps1. -->
+    <ApplicationIcon>Assets\binoc.ico</ApplicationIcon>
     <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
   </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Icon assets, loaded at runtime via avares:// for the window icon (see MainWindow). -->
+    <AvaloniaResource Include="Assets/**" />
+  </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="Avalonia" Version="12.0.5" />

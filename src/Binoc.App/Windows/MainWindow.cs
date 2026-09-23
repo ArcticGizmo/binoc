@@ -4,6 +4,7 @@ using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Media;
+using Avalonia.Platform;
 using Avalonia.Platform.Storage;
 using Binoc.App.History;
 using Binoc.App.Theming;
@@ -43,6 +44,7 @@ internal sealed class MainWindow : Window
     public MainWindow()
     {
         Title = "binoc";
+        Icon = LoadAppIcon();
         Width = 960;
         Height = 720;
         MinWidth = 620;
@@ -80,6 +82,24 @@ internal sealed class MainWindow : Window
                 e.Handled = true;
             }
         };
+    }
+
+    // The window/taskbar icon. Load the multi-resolution .ico (not the 256px .png): Avalonia's Win32 backend
+    // asks for a 16px frame for the title bar and 24/32px for the taskbar, and a multi-frame .ico lets Windows
+    // pick the purpose-built native frame. Handing it the 256px .png instead forces a 256→16 downscale, which
+    // is what made the title-bar/taskbar icon look muddy. Both come from binoc.svg via tools/gen-icons.ps1.
+    // Null if it can't be loaded, so a missing asset never blocks startup.
+    private static WindowIcon? LoadAppIcon()
+    {
+        try
+        {
+            using var stream = AssetLoader.Open(new Uri("avares://binoc/Assets/binoc.ico"));
+            return new WindowIcon(stream);
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     // A full-window "drop here" overlay shown while a file is dragged over the window — in both the empty and
@@ -705,8 +725,10 @@ internal sealed class MainWindow : Window
         {
             stack.Children.Add(PostureLabel("R8 CONFIG"));
             stack.Children.Add(PostureLine("R8 version", o.R8Version ?? "unknown", Palette.FgBrush));
-            stack.Children.Add(FlagLine("Optimisations (full mode)", o.R8OptimizationsEnabled));
+            stack.Children.Add(FlagLine("Full mode", o.R8FullMode));
+            stack.Children.Add(FlagLine("Optimisations", o.R8OptimizationsEnabled));
             stack.Children.Add(FlagLine("Repackage classes", o.R8RepackageClassesEnabled));
+            stack.Children.Add(FlagLine("Resource shrinking", o.R8ResourceShrinkingEnabled));
             stack.Children.Add(FlagLine("Optimised resource shrinking", o.R8OptimizedResourceShrinkingEnabled));
         }
 
