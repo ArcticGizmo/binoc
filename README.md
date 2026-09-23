@@ -35,6 +35,21 @@ everything itself in managed .NET.
 
 ---
 
+## Install
+
+Windows, from a PowerShell prompt:
+
+```powershell
+irm https://raw.githubusercontent.com/ArcticGizmo/binoc/main/install.ps1 | iex
+```
+
+This downloads the latest release's installer, **verifies it against the published `SHA256SUMS.txt`**, and
+runs it (per-user, no admin). Pin a version with `$env:BINOC_VERSION = '0.1.0'` before the pipe. See
+[docs/distribution.md](docs/distribution.md) for how releases, the installer, and the in-app changelog fit
+together.
+
+---
+
 ## Building from source
 
 You'll need the **.NET 10 SDK**.
