@@ -53,13 +53,19 @@ internal sealed class MainWindow : Window
         Background = Palette.FormBgBrush;
 
         // Two columns: a persistent recent-history sidebar (left) and the drop-zone/report content (right),
-        // with a full-window drag overlay on top.
+        // with a version/changelog footer docked beneath and a full-window drag overlay on top.
         _dragOverlay = BuildDragOverlay();
         Grid.SetColumn(_sidebarHost, 0);
         Grid.SetColumn(_contentLayer, 1);
         _mainGrid.Children.Add(_sidebarHost);
         _mainGrid.Children.Add(_contentLayer);
-        _contentHost.Children.Add(_mainGrid);
+
+        var footer = BuildFooter();
+        var body = new DockPanel();
+        DockPanel.SetDock(footer, Dock.Bottom);
+        body.Children.Add(footer);
+        body.Children.Add(_mainGrid); // fills the space above the footer
+        _contentHost.Children.Add(body);
         _contentHost.Children.Add(_dragOverlay);
         Content = _contentHost;
 
@@ -119,6 +125,42 @@ internal sealed class MainWindow : Window
             HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center,
         },
     };
+
+    // A slim footer docked at the bottom of the window: a muted "binoc vX.Y.Z · What's new" affordance on
+    // the right that opens the full changelog. Present in both the empty and report states, so the changelog
+    // is always one click away without a menu bar (which binoc doesn't have).
+    private Control BuildFooter()
+    {
+        var link = new Button
+        {
+            Content = $"binoc {DisplayVersion()}  ·  What's new",
+            Foreground = Palette.MutedBrush, Background = Brushes.Transparent, BorderThickness = new Thickness(0),
+            Padding = new Thickness(8, 4), FontSize = 12, Cursor = new Cursor(StandardCursorType.Hand),
+            HorizontalAlignment = HorizontalAlignment.Right,
+        };
+        ToolTip.SetTip(link, "View the changelog");
+        link.Click += (_, _) => ShowChangelog();
+
+        return new Border
+        {
+            BorderBrush = Palette.BorderBrush, BorderThickness = new Thickness(0, 1, 0, 0),
+            Padding = new Thickness(12, 2), Child = link,
+        };
+    }
+
+    // Opens the full changelog window, owned by this window so it centres over it and closes with it.
+    private void ShowChangelog()
+    {
+        var window = ChangelogWindow.FullHistory();
+        window.Show(this);
+        window.Activate();
+    }
+
+    private static string DisplayVersion()
+    {
+        var v = AppInfo.Version;
+        return v.StartsWith('v') ? v : "v" + v;
+    }
 
     // ── Empty state: the drop zone ──────────────────────────────────────────────────
     private void ShowDropZone()

@@ -19,6 +19,9 @@
   <ItemGroup>
     <!-- Icon assets, loaded at runtime via avares:// for the window icon (see MainWindow). -->
     <AvaloniaResource Include="Assets/**" />
+    <!-- The changelog is embedded so the in-app "What's new" window can render it at runtime (read via
+         the assembly manifest under the logical name "Binoc.CHANGELOG.md"). See ChangelogMarkdown. -->
+    <EmbeddedResource Include="..\..\CHANGELOG.md" LogicalName="Binoc.CHANGELOG.md" />
   </ItemGroup>
 
   <ItemGroup>
