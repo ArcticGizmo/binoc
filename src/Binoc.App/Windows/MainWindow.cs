@@ -6,6 +6,7 @@ using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Platform;
 using Avalonia.Platform.Storage;
+using Avalonia.Threading;
 using Binoc.App.History;
 using Binoc.App.Theming;
 using Binoc.Core.Analysis;
@@ -33,6 +34,12 @@ internal sealed class MainWindow : Window
     private Border _dragOverlay = null!;
     private Border _dropZone = null!;
     private readonly HistoryStore _history = new();
+
+    // Update state (footer "Check for updates" / "Update" button — manual only, never checked on startup).
+    private readonly UpdateService _updates = new();
+    private Button? _updateButton;
+    private string? _availableVersion;
+    private bool _updateBusy;
 
     // Drag/search state.
     private bool _dragActive;
@@ -126,11 +133,19 @@ internal sealed class MainWindow : Window
         },
     };
 
-    // A slim footer docked at the bottom of the window: a muted "binoc vX.Y.Z · What's new" affordance on
-    // the right that opens the full changelog. Present in both the empty and report states, so the changelog
-    // is always one click away without a menu bar (which binoc doesn't have).
+    // A slim footer docked at the bottom of the window: the "Check for updates" button on the left, and a
+    // muted "binoc vX.Y.Z · What's new" affordance on the right that opens the full changelog. Present in
+    // both the empty and report states, so both are always one click away without a menu bar (binoc has none).
     private Control BuildFooter()
     {
+        _updateButton = new Button
+        {
+            Background = Brushes.Transparent, BorderThickness = new Thickness(0), FontSize = 12,
+            Cursor = new Cursor(StandardCursorType.Hand), HorizontalAlignment = HorizontalAlignment.Left,
+        };
+        SetUpdateIdle();
+        _updateButton.Click += async (_, _) => await OnUpdateButtonClick();
+
         var link = new Button
         {
             Content = $"binoc {DisplayVersion()}  ·  What's new",
@@ -141,11 +156,125 @@ internal sealed class MainWindow : Window
         ToolTip.SetTip(link, "View the changelog");
         link.Click += (_, _) => ShowChangelog();
 
+        var bar = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto"), VerticalAlignment = VerticalAlignment.Center };
+        Grid.SetColumn(_updateButton, 0);
+        Grid.SetColumn(link, 2);
+        bar.Children.Add(_updateButton);
+        bar.Children.Add(link);
+
         return new Border
         {
             BorderBrush = Palette.BorderBrush, BorderThickness = new Thickness(0, 1, 0, 0),
-            Padding = new Thickness(12, 2), Child = link,
+            Padding = new Thickness(12, 2), Child = bar,
         };
+    }
+
+    // ── In-app updates (manual) ─────────────────────────────────────────────────────
+    // One button, two jobs: with nothing staged it runs a check; once a newer version is found it has turned
+    // orange and this instead applies it. Never fires on its own — only on a click.
+    private async Task OnUpdateButtonClick()
+    {
+        if (_updateBusy || _updateButton is null) return;
+
+        // Already found an update -> this click installs it.
+        if (_availableVersion is not null) { await ApplyUpdate(); return; }
+
+        // A dev run / portable copy can't consult a feed — say why and stop.
+        if (!_updates.CanCheck)
+        {
+            ToolTip.SetTip(_updateButton, _updates.UnavailableReason);
+            FlashThenIdle("Updates unavailable");
+            return;
+        }
+
+        _updateBusy = true;
+        _updateButton.IsEnabled = false;
+        _updateButton.Content = "Checking…";
+        try
+        {
+            var version = await _updates.CheckAsync();
+            if (version is not null) SetUpdateAvailable(version);
+            else FlashThenIdle("Up to date");
+        }
+        catch (Exception ex)
+        {
+            ToolTip.SetTip(_updateButton, ex.Message);
+            FlashThenIdle("Check failed");
+        }
+        finally
+        {
+            _updateBusy = false;
+            _updateButton.IsEnabled = true;
+        }
+    }
+
+    // Installs the staged update and restarts (the process is replaced on success). A portable/dev copy can
+    // see the new version but not apply it — explain rather than pretend.
+    private async Task ApplyUpdate()
+    {
+        if (_updateButton is null) return;
+        if (!_updates.SelfUpdates)
+        {
+            ToolTip.SetTip(_updateButton, _updates.UnavailableReason);
+            return;
+        }
+
+        _updateBusy = true;
+        _updateButton.IsEnabled = false;
+        _updateButton.Content = "Updating…";
+        try
+        {
+            await _updates.ApplyAsync(); // downloads, applies, restarts — exits the process on success
+        }
+        catch (Exception ex)
+        {
+            // Apply failed: re-arm the orange button so they can retry, with the reason on hover.
+            _updateBusy = false;
+            _updateButton.IsEnabled = true;
+            ToolTip.SetTip(_updateButton, "Update failed: " + ex.Message);
+            if (_availableVersion is { } v) SetUpdateAvailable(v);
+        }
+    }
+
+    // The orange "Update to vX.Y.Z" state.
+    private void SetUpdateAvailable(string version)
+    {
+        _availableVersion = version;
+        if (_updateButton is null) return;
+        _updateButton.Content = $"Update to v{version}";
+        _updateButton.Background = Palette.InfoBrush;   // Nord Aurora orange
+        _updateButton.Foreground = new SolidColorBrush(Palette.FormBg);
+        _updateButton.FontWeight = FontWeight.SemiBold;
+        _updateButton.Padding = new Thickness(12, 4);
+        _updateButton.CornerRadius = new CornerRadius(6);
+        ToolTip.SetTip(_updateButton, _updates.SelfUpdates
+            ? $"Install v{version} and restart"
+            : _updates.UnavailableReason);
+    }
+
+    // The idle "Check for updates" state.
+    private void SetUpdateIdle()
+    {
+        if (_updateButton is null) return;
+        _availableVersion = null;
+        _updateButton.Content = "Check for updates";
+        _updateButton.Background = Brushes.Transparent;
+        _updateButton.Foreground = Palette.MutedBrush;
+        _updateButton.FontWeight = FontWeight.Normal;
+        _updateButton.Padding = new Thickness(8, 4);
+        _updateButton.CornerRadius = new CornerRadius(0);
+        ToolTip.SetTip(_updateButton, "Check GitHub for a newer version");
+    }
+
+    // Shows a transient message (e.g. "Up to date"), then reverts to idle after a moment — unless an update
+    // was found in the meantime.
+    private void FlashThenIdle(string message)
+    {
+        if (_updateButton is null) return;
+        _updateButton.Content = message;
+        var timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(3) };
+        timer.Tick += (_, _) => { timer.Stop(); if (_availableVersion is null) SetUpdateIdle(); };
+        timer.Start();
     }
 
     // Opens the full changelog window, owned by this window so it centres over it and closes with it.

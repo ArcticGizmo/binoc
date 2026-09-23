@@ -61,8 +61,17 @@ update it pops `ChangelogWindow` with just the sections in between, then records
 install shows nothing (no history to diff). The footer's "binoc vX.Y.Z · What's new" opens the full changelog
 any time; the popup's "Don't show changelogs again" flips the suppress flag.
 
+## In-app updates (manual)
+
+`UpdateService` (`src/Binoc.App/`) drives a single footer button over the GitHub release feed — **manual
+only, never checked on startup or in the background**:
+
+- **"Check for updates"** queries the feed. Up to date → a brief "Up to date", then it reverts.
+- A newer version → the button turns **orange, "Update to vX.Y.Z"**. Clicking it downloads, applies and
+  restarts (Velopack's `DownloadUpdatesAsync` + `ApplyUpdatesAndRestart`).
+- Checking works on any installed shape; *applying* is withheld on a portable zip or a dev `dotnet run`
+  (the button explains why on hover). `UpdateManager.IsInstalled` / `IsPortable` gate both.
+
 ## Not yet wired
 
-- **In-app updates** via Velopack `UpdateManager` (a "Check for updates" action) — the installer and update
-  feed exist, but the in-app pull is still on the M7 list.
 - **macOS head** — the pure-managed core keeps it cheap, but there's no mac build job or `.app`/DMG packaging.
