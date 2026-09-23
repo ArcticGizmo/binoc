@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Binoc.Core/Binoc.Core.csproj" />
+    <Project Path="src/Binoc.App/Binoc.App.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Binoc.Tests/Binoc.Tests.csproj" />
+  </Folder>
+</Solution>

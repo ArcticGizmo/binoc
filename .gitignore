@@ -1,0 +1,15 @@
+# .NET build output
+bin/
+obj/
+
+# Velopack packaging output (M7)
+publish/
+releases/
+
+# IDE
+.vs/
+.idea/
+*.user
+
+# Captures (screenshots for UI work live here, but aren't committed)
+captures/

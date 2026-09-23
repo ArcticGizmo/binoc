@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <!-- Plain net10.0: Binoc.Core is pure, headless analysis (no Avalonia, no Win32), so it builds
+         and runs anywhere and the same code serves a future macOS head. -->
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>Binoc.Core</RootNamespace>
+    <AssemblyName>Binoc.Core</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- SignedCms (PKCS#7 / CMS) for APK v1 / AAB upload-key blocks and the iOS embedded.mobileprovision.
+         A Microsoft first-party, in-box framework package — not a third-party parsing dependency (D1). -->
+    <PackageReference Include="System.Security.Cryptography.Pkcs" Version="10.0.0" />
+  </ItemGroup>
+</Project>
