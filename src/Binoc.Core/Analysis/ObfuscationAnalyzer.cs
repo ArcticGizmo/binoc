@@ -46,8 +46,10 @@ public sealed class ObfuscationAnalyzer : IAnalyzer
                 {
                     info.HasR8Metadata = true;
                     info.R8Version = md.Version;
+                    info.R8FullMode = md.FullMode;
                     info.R8OptimizationsEnabled = md.OptimizationsEnabled;
                     info.R8RepackageClassesEnabled = md.RepackageClassesEnabled;
+                    info.R8ResourceShrinkingEnabled = md.ResourceShrinkingEnabled;
                     info.R8OptimizedResourceShrinkingEnabled = md.OptimizedResourceShrinkingEnabled;
                     info.ObfuscationPercent = md.ObfuscationPercent;
                     info.OptimizationPercent = md.OptimizationPercent;

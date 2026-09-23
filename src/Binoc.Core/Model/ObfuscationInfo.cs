@@ -28,13 +28,24 @@ public sealed class ObfuscationInfo
     /// <summary>R8 compiler version from r8.json (Play only scores bundles built with a recent-enough R8).</summary>
     public string? R8Version { get; set; }
 
-    /// <summary>Whether R8 optimisations ran (roughly "full mode" optimisation), from r8.json.</summary>
+    /// <summary>Whether R8 ran in full mode (the inverse of ProGuard-compatibility mode), from r8.json. This is
+    /// what Play reports as "full mode" — a separate axis from <see cref="R8OptimizationsEnabled"/>.</summary>
+    public bool? R8FullMode { get; set; }
+
+    /// <summary>Whether R8 optimisations ran at all (i.e. not <c>-dontoptimize</c>), from r8.json. Not the same as
+    /// full mode.</summary>
     public bool? R8OptimizationsEnabled { get; set; }
 
     /// <summary>Whether R8 repackaged classes into one package, from r8.json.</summary>
     public bool? R8RepackageClassesEnabled { get; set; }
 
-    /// <summary>Whether R8's optimised resource shrinking ran, from r8.json.</summary>
+    /// <summary>Whether resource shrinking ran (the traditional AGP <c>shrinkResources</c> pass). r8.json doesn't
+    /// record the standalone shrinker directly; this is true when optimised resource shrinking is on (which
+    /// requires it), otherwise null. Play lists this separately from optimised resource shrinking.</summary>
+    public bool? R8ResourceShrinkingEnabled { get; set; }
+
+    /// <summary>Whether R8's <em>optimised</em> (code-aware) resource shrinking ran, from r8.json. Play lists this
+    /// separately from plain resource shrinking.</summary>
     public bool? R8OptimizedResourceShrinkingEnabled { get; set; }
 
     /// <summary>The raw r8.json content (pretty-printed) for display in the report, when present. Null otherwise.</summary>

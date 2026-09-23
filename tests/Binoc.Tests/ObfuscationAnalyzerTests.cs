@@ -54,8 +54,11 @@ public class ObfuscationAnalyzerTests
         var r8 = """
         {
           "version": "9.0.32",
-          "isOptimizationsEnabled": true,
-          "isRepackageClassesEnabled": true,
+          "options": {
+            "isProGuardCompatibilityModeEnabled": false,
+            "isOptimizationsEnabled": true,
+            "isRepackageClassesEnabled": true
+          },
           "resourceOptimization": { "isOptimizedShrinkingEnabled": true },
           "stats": {
             "noObfuscationPercentage": 12.4,
@@ -76,8 +79,10 @@ public class ObfuscationAnalyzerTests
             Assert.Equal(60, o.OptimizationPercent);  // 100 - 40
             Assert.Equal(69, o.ShrinkingPercent);     // 100 - 30.6 -> 69.4 -> 69
             Assert.Equal("9.0.32", o.R8Version);
+            Assert.True(o.R8FullMode);
             Assert.True(o.R8OptimizationsEnabled);
             Assert.True(o.R8RepackageClassesEnabled);
+            Assert.True(o.R8ResourceShrinkingEnabled);
             Assert.True(o.R8OptimizedResourceShrinkingEnabled);
             Assert.False(string.IsNullOrEmpty(o.R8MetadataRaw));
         }
